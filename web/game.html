@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>欢乐跳棋 - 游戏</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="game-page">
+  <main class="game-shell">
+    <header class="game-header">
+      <h1>欢乐跳棋</h1>
+      <div class="header-actions">
+        <button id="btnIds" type="button">格号</button>
+        <button id="btnRestart" type="button">重新开始</button>
+        <button id="btnBack" type="button">返回主页</button>
+      </div>
+    </header>
+
+    <section id="statusBar" class="status-bar">
+      <div id="playerInfo" class="player-info"></div>
+      <div id="turnInfo" class="turn-info">
+        <span id="turnMessage">初始化中...</span>
+        <button id="btnEndJump" type="button" hidden>结束跳跃</button>
+      </div>
+    </section>
+
+    <section class="board-wrap">
+      <canvas id="board" width="700" height="700" aria-label="欢乐跳棋棋盘"></canvas>
+    </section>
+  </main>
+
+  <div id="tooltip" class="tooltip"></div>
+
+  <script src="js/config.js"></script>
+  <script src="board_data.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/piece.js"></script>
+  <script src="js/board.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>

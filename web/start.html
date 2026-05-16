@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>欢乐跳棋</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .start-screen {
+      text-align: center;
+      padding: 40px;
+    }
+    .start-screen h1 {
+      font-size: 48px;
+      margin-bottom: 10px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+    .start-screen p {
+      color: #888;
+      margin-bottom: 40px;
+    }
+    .setup-box {
+      background: #16213e;
+      padding: 30px 40px;
+      border-radius: 15px;
+      display: inline-block;
+      text-align: left;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+    .setup-box h3 {
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .setting {
+      margin-bottom: 20px;
+    }
+    .setting label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+      color: #aaa;
+    }
+    .setting select {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: none;
+      background: #0f3460;
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .setting select:focus {
+      outline: 2px solid #e94560;
+    }
+    .setting select option:disabled {
+      color: #777;
+    }
+    .setting-hint {
+      margin-top: 8px;
+      color: #aaa;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .btn-start {
+      width: 100%;
+      padding: 15px;
+      margin-top: 10px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 18px;
+      font-weight: bold;
+      transition: transform 0.2s, background 0.2s;
+    }
+    .btn-start {
+      background: linear-gradient(135deg, #e94560 0%, #d63850 100%);
+      color: #fff;
+    }
+    .btn-start:hover {
+      transform: scale(1.02);
+      background: linear-gradient(135deg, #f05670 0%, #e94560 100%);
+    }
+    .rules {
+      margin-top: 30px;
+      padding: 20px;
+      background: #0f346020;
+      border-radius: 10px;
+      font-size: 13px;
+      color: #888;
+    }
+    .rules h4 {
+      color: #fff;
+      margin-bottom: 10px;
+    }
+    .rules ul {
+      padding-left: 20px;
+    }
+    .rules li {
+      margin-bottom: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="start-screen">
+    <h1>🎮 欢乐跳棋</h1>
+    <p>六角棋盘多人对弈</p>
+    
+    <div class="setup-box">
+      <h3>游戏设置</h3>
+      
+      <div class="setting">
+        <label>👥 玩家数量</label>
+        <select id="playerCount">
+          <option value="1">1人 (自动补AI)</option>
+          <option value="2" selected>2人</option>
+          <option value="3">3人</option>
+          <option value="4">4人</option>
+          <option value="5">5人</option>
+          <option value="6">6人</option>
+        </select>
+      </div>
+
+      <div class="setting">
+        <label>🔺 每名玩家控制角区数</label>
+        <select id="seatsPerPlayer">
+          <option value="1">1个角区</option>
+          <option value="2">2个角区</option>
+          <option value="3" selected>3个角区</option>
+        </select>
+        <div id="setupHint" class="setting-hint"></div>
+      </div>
+      
+      <div class="setting">
+        <label>🤖 AI难度</label>
+        <select id="aiDifficulty">
+          <option value="easy">简单</option>
+          <option value="medium" selected>中等</option>
+          <option value="hard">困难</option>
+        </select>
+      </div>
+      
+      <button class="btn-start" id="startBtn">开始游戏</button>
+    </div>
+    
+    <div class="rules">
+      <h4>📖 游戏规则</h4>
+      <ul>
+        <li>玩家可以控制一个或多个角区，每个角区有10枚棋子</li>
+        <li>每枚棋子的目标是进入自己起点的对角角区</li>
+        <li>单步移动到相邻空格，或跳跃过相邻棋子到空格</li>
+        <li>跳跃后可继续跳跃，也可以主动结束回合</li>
+        <li>先完成全部棋子转移的玩家获胜</li>
+      </ul>
+    </div>
+  </div>
+  
+  <script>
+    document.getElementById('startBtn').addEventListener('click', () => {
+      const playerCount = document.getElementById('playerCount').value;
+      const seatsPerPlayer = document.getElementById('seatsPerPlayer').value;
+      const aiDifficulty = document.getElementById('aiDifficulty').value;
+      
+      // 存储配置到sessionStorage
+      sessionStorage.setItem('gameConfig', JSON.stringify({ playerCount, seatsPerPlayer, aiDifficulty }));
+      
+      // 跳转到游戏页面
+      window.location.href = 'game.html';
+    });
+
+    const playerCountSelect = document.getElementById('playerCount');
+    const seatsPerPlayerSelect = document.getElementById('seatsPerPlayer');
+    const setupHint = document.getElementById('setupHint');
+
+    function getControllerCount() {
+      const humans = Number(playerCountSelect.value);
+      return humans === 1 ? 2 : humans;
+    }
+
+    function updateSeatOptions() {
+      const controllerCount = getControllerCount();
+      let bestEnabled = null;
+
+      Array.from(seatsPerPlayerSelect.options).forEach((option) => {
+        const seats = Number(option.value);
+        const disabled = controllerCount * seats > 6;
+        option.disabled = disabled;
+        if (!disabled) bestEnabled = option.value;
+      });
+
+      if (seatsPerPlayerSelect.selectedOptions[0].disabled) {
+        seatsPerPlayerSelect.value = bestEnabled || '1';
+      }
+
+      const seatsPerPlayer = Number(seatsPerPlayerSelect.value);
+      const totalSeats = controllerCount * seatsPerPlayer;
+      const aiText = Number(playerCountSelect.value) === 1 ? '，另有1名AI' : '';
+      setupHint.textContent = `将创建 ${controllerCount} 名控制者${aiText}，共占用 ${totalSeats}/6 个角区。`;
+    }
+
+    playerCountSelect.addEventListener('change', updateSeatOptions);
+    seatsPerPlayerSelect.addEventListener('change', updateSeatOptions);
+    updateSeatOptions();
+  </script>
+</body>
+</html>
