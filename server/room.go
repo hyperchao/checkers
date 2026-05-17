@@ -39,11 +39,21 @@ type Room struct {
 func (r *Room) PlayerCount() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	return r.playerCountLocked()
+}
+
+func (r *Room) playerCountLocked() int {
 	return 1 + len(r.ClientIDs)
 }
 
 func (r *Room) IsFull() bool {
-	return r.PlayerCount() >= r.Config.MaxPlayers
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.isFullLocked()
+}
+
+func (r *Room) isFullLocked() bool {
+	return r.playerCountLocked() >= r.Config.MaxPlayers
 }
 
 func (r *Room) AddClient(clientID string) error {
@@ -53,7 +63,7 @@ func (r *Room) AddClient(clientID string) error {
 	if r.Status == RoomPlaying {
 		return fmt.Errorf("room is already playing")
 	}
-	if r.IsFull() {
+	if r.isFullLocked() {
 		return fmt.Errorf("room is full")
 	}
 	for _, id := range r.ClientIDs {
@@ -64,7 +74,7 @@ func (r *Room) AddClient(clientID string) error {
 
 	r.ClientIDs = append(r.ClientIDs, clientID)
 
-	if r.IsFull() {
+	if r.isFullLocked() {
 		r.Status = RoomFull
 	}
 
@@ -128,7 +138,7 @@ func (r *Room) ToJSON() map[string]interface{} {
 		"status":      r.Status,
 		"hostId":      r.HostID,
 		"clientIds":   r.ClientIDs,
-		"playerCount": r.PlayerCount(),
+		"playerCount": r.playerCountLocked(),
 		"maxPlayers":  r.Config.MaxPlayers,
 	}
 }
@@ -192,6 +202,67 @@ func (rm *RoomManager) RemoveRoom(code string) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 	delete(rm.rooms, code)
+}
+
+type LeaveRoomResult struct {
+	IsHost      bool
+	RoomExists  bool
+	Room        *Room
+	RoomRemoved bool
+}
+
+func (rm *RoomManager) HandleLeaveRoom(clientID string) LeaveRoomResult {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	for code, room := range rm.rooms {
+		room.mu.RLock()
+		isHost := room.HostID == clientID
+		isMember := room.HostID == clientID
+		if !isMember {
+			for _, id := range room.ClientIDs {
+				if id == clientID {
+					isMember = true
+					break
+				}
+			}
+		}
+		room.mu.RUnlock()
+
+		if !isMember {
+			continue
+		}
+
+		if isHost {
+			delete(rm.rooms, code)
+			return LeaveRoomResult{
+				IsHost:      true,
+				RoomExists:  true,
+				Room:        room,
+				RoomRemoved: true,
+			}
+		}
+
+		room.mu.Lock()
+		for i, id := range room.ClientIDs {
+			if id == clientID {
+				room.ClientIDs = append(room.ClientIDs[:i], room.ClientIDs[i+1:]...)
+				if room.Status == RoomFull {
+					room.Status = RoomWaiting
+				}
+				break
+			}
+		}
+		room.mu.Unlock()
+
+		return LeaveRoomResult{
+			IsHost:     false,
+			RoomExists: true,
+			Room:       room,
+		}
+	}
+
+	return LeaveRoomResult{RoomExists: false}
 }
 
 func (rm *RoomManager) ListRooms() []map[string]interface{} {

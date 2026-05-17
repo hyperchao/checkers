@@ -205,7 +205,7 @@ func (h *Hub) broadcastToRoom(roomCode string, msg Message, excludeID string) {
 		select {
 		case client.Send <- data:
 		default:
-			close(client.Send)
+			log.Printf("client %s send buffer full, skipping broadcast", client.ID)
 		}
 	}
 }

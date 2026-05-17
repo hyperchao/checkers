@@ -19,6 +19,7 @@ class Game {
     this.isHost = false;
     this.myPlayerId = null;
     this.lastStateSync = 0;
+    this.networkDisconnected = false;
     this.setupEvents();
     this.initNetwork();
   }
@@ -51,19 +52,29 @@ class Game {
 
       if (this.isHost) {
         await this.network.createPeerConnection();
-        await this.network.createDataChannel('game');
+        const channel = await this.network.createDataChannel('game');
 
-        this.network.onStateChange = (state) => {
-          if (state === 'connected' && this.network.dataChannels.size > 0) {
-            this.startGame();
+        await new Promise((resolve) => {
+          if (channel.readyState === 'open') {
+            resolve();
+          } else {
+            channel.onopen = () => resolve();
           }
-        };
+        });
+
+        this.startGame();
       } else {
-        this.network.onStateChange = (state) => {
-          if (state === 'connected' && this.network.dataChannels.size > 0) {
-            this.network.sendToHost(createMessage(NETWORK_MESSAGES.GAME_STATE, { request: true }));
-          }
-        };
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('DataChannel timeout')), 30000);
+
+          this.network.onStateChange = (state) => {
+            if (state === 'connected' && this.network.dataChannels.size > 0) {
+              clearTimeout(timeout);
+              this.network.sendToHost(createMessage(NETWORK_MESSAGES.GAME_STATE, { request: true }));
+              resolve();
+            }
+          };
+        });
       }
     } catch (error) {
       console.error('Failed to initialize network:', error);
@@ -411,17 +422,10 @@ class Game {
   handleDisconnect() {
     if (!this.gameOver) {
       this.gameOver = true;
+      this.networkDisconnected = true;
       this.render();
-      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.68)';
-      this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-      this.ctx.fillStyle = '#ffffff';
-      this.ctx.textAlign = 'center';
-      this.ctx.textBaseline = 'middle';
-      this.ctx.font = 'bold 28px sans-serif';
-      this.ctx.fillText('连接断开', this.canvas.width / 2, this.canvas.height / 2);
-      this.ctx.font = '18px sans-serif';
-      this.ctx.fillText('请返回主页重新开始', this.canvas.width / 2, this.canvas.height / 2 + 40);
     }
+  }
   }
 
   showGameOver() {
@@ -459,6 +463,18 @@ class Game {
         renderPiece(this.ctx, piece, this.board, player, piece === this.selectedPiece);
       });
     });
+
+    if (this.networkDisconnected) {
+      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.68)';
+      this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      this.ctx.fillStyle = '#ffffff';
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.font = 'bold 28px sans-serif';
+      this.ctx.fillText('连接断开', this.canvas.width / 2, this.canvas.height / 2);
+      this.ctx.font = '18px sans-serif';
+      this.ctx.fillText('请返回主页重新开始', this.canvas.width / 2, this.canvas.height / 2 + 40);
+    }
   }
 
   drawJumpPath() {

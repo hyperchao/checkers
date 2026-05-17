@@ -61,13 +61,14 @@ class NetworkManager {
   }
 
   disconnect() {
-    if (this.roomCode) {
+    if (this.roomCode && this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.sendSignaling(NETWORK_MESSAGES.LEAVE_ROOM, {});
     }
     this.closeDataChannels();
     if (this.ws) {
-      this.ws.close();
+      const ws = this.ws;
       this.ws = null;
+      setTimeout(() => ws.close(), 50);
     }
     this.setState('disconnected');
   }
@@ -108,7 +109,7 @@ class NetworkManager {
         break;
 
       case NETWORK_MESSAGES.ERROR:
-        this.onError(msg.payload.message || 'Unknown error');
+        this.onError((msg.payload && msg.payload.message) || 'Unknown error');
         break;
     }
   }
@@ -122,7 +123,7 @@ class NetworkManager {
     this.ws.send(serializeMessage(msg));
   }
 
-  async createRoom(config = {}) {
+  createRoom(config = {}) {
     this.mode = 'host';
     this.sendSignaling(NETWORK_MESSAGES.CREATE_ROOM, {
       playerCount: config.playerCount || 2,
@@ -131,7 +132,7 @@ class NetworkManager {
     });
   }
 
-  async joinRoom(roomCode) {
+  joinRoom(roomCode) {
     this.mode = 'client';
     this.sendSignaling(NETWORK_MESSAGES.JOIN_ROOM, {
       roomCode: roomCode,
@@ -151,9 +152,11 @@ class NetworkManager {
 
     this.peerConnection.onicecandidate = (event) => {
       if (event.candidate && this.roomCode) {
+        const targetId = this.getTargetPeerId();
+        if (!targetId) return;
         this.sendSignaling(NETWORK_MESSAGES.ICE_CANDIDATE, {
           roomCode: this.roomCode,
-          targetId: this.mode === 'host' ? this.getClientId() : this.roomInfo.hostId,
+          targetId: targetId,
           candidate: JSON.stringify(event.candidate)
         });
       }
@@ -312,9 +315,12 @@ class NetworkManager {
     this.dataChannels.clear();
   }
 
-  getClientId() {
-    if (this.dataChannels.size > 0) {
-      return this.dataChannels.keys().next().value;
+  getTargetPeerId() {
+    if (this.mode === 'host' && this.roomInfo && this.roomInfo.clientIds) {
+      return this.roomInfo.clientIds[0] || null;
+    }
+    if (this.roomInfo) {
+      return this.roomInfo.hostId || null;
     }
     return null;
   }

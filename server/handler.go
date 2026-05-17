@@ -1,8 +1,10 @@
 package main
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"log"
+	"math/big"
 	"net/http"
 	"time"
 
@@ -92,7 +94,9 @@ func (h *Hub) writePump(client *Client) {
 		case message, ok := <-client.Send:
 			client.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
-				client.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+				if err := client.Conn.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
+					log.Printf("failed to write close message: %v", err)
+				}
 				return
 			}
 
@@ -279,32 +283,26 @@ func (h *Hub) handleICECandidate(client *Client, payload json.RawMessage) {
 }
 
 func (h *Hub) handleLeaveRoom(client *Client) {
-	roomCode := client.GetRoom()
-	if roomCode == "" {
+	result := h.Rooms.HandleLeaveRoom(client.ID)
+
+	if !result.RoomExists {
 		return
 	}
 
-	room, exists := h.Rooms.GetRoom(roomCode)
-	if !exists {
-		return
-	}
-
-	if room.IsHost(client.ID) {
-		h.broadcastToRoom(roomCode, Message{
+	if result.IsHost {
+		h.broadcastToRoom(result.Room.Code, Message{
 			Type:    MsgError,
 			Payload: json.RawMessage(`{"message":"Host left the room"}`),
 		}, client.ID)
-		h.Rooms.RemoveRoom(roomCode)
 	} else {
-		room.RemoveClient(client.ID)
-		h.broadcastToRoom(roomCode, Message{
+		h.broadcastToRoom(result.Room.Code, Message{
 			Type:    MsgRoomInfo,
-			Payload: mustMarshal(room.ToJSON()),
+			Payload: mustMarshal(result.Room.ToJSON()),
 		}, client.ID)
 	}
 
 	client.SetRoom("")
-	log.Printf("client %s left room %s", client.ID, roomCode)
+	log.Printf("client %s left room", client.ID)
 }
 
 func generatePeerID() string {
@@ -315,8 +313,12 @@ func generateRandomString(length int) string {
 	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	b := make([]byte, length)
 	for i := range b {
-		b[i] = chars[time.Now().UnixNano()%int64(len(chars))]
-		time.Sleep(time.Nanosecond)
+		r, err := rand.Int(rand.Reader, big.NewInt(int64(len(chars))))
+		if err != nil {
+			b[i] = chars[0]
+			continue
+		}
+		b[i] = chars[r.Int64()]
 	}
 	return string(b)
 }
