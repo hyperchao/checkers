@@ -44,10 +44,12 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		Send: make(chan []byte, 256),
 	}
 
-	h.Register <- client
-
+	// Start pumps before registering to avoid blocking on h.Register
+	// if Hub is busy processing another client's disconnect
 	go h.writePump(client)
 	go h.readPump(client)
+
+	h.Register <- client
 }
 
 func (h *Hub) readPump(client *Client) {
@@ -145,14 +147,24 @@ func (h *Hub) handleMessage(client *Client, msg Message) {
 }
 
 func (h *Hub) handleCreateRoom(client *Client, payload json.RawMessage) {
+	log.Printf("handleCreateRoom: client=%s", client.ID)
 	var req CreateRoomPayload
 	if err := json.Unmarshal(payload, &req); err != nil {
+		log.Printf("handleCreateRoom: invalid payload: %v", err)
 		client.SendMessage(Message{
 			Type: MsgError,
 			Payload: json.RawMessage(`{"message":"invalid payload"}`),
 		})
 		return
 	}
+
+	// Ensure client is registered in Hub (may not be if h.Register is blocked)
+	h.mu.Lock()
+	if _, exists := h.Clients[client.ID]; !exists {
+		h.Clients[client.ID] = client
+		log.Printf("handleCreateRoom: manually registered client=%s", client.ID)
+	}
+	h.mu.Unlock()
 
 	room := h.Rooms.CreateRoom(client.ID, RoomConfig{
 		PlayerCount:    req.PlayerCount,
@@ -162,6 +174,7 @@ func (h *Hub) handleCreateRoom(client *Client, payload json.RawMessage) {
 
 	client.SetRoom(room.Code)
 
+	log.Printf("handleCreateRoom: sending room_info to client=%s, room=%s", client.ID, room.Code)
 	client.SendMessage(Message{
 		Type:    MsgRoomInfo,
 		Payload: mustMarshal(room.ToJSON()),
@@ -212,6 +225,16 @@ func (h *Hub) handleJoinRoom(client *Client, payload json.RawMessage) {
 		Payload: mustMarshal(room.ToJSON()),
 	})
 
+	// Send room info to host directly
+	hostClient, ok := h.GetClient(room.HostID)
+	if ok && hostClient.ID != client.ID {
+		hostClient.SendMessage(Message{
+			Type:    MsgRoomInfo,
+			Payload: mustMarshal(room.ToJSON()),
+		})
+	}
+
+	// Also broadcast to any other clients that might be in the room
 	h.broadcastToRoom(room.Code, Message{
 		Type:    MsgRoomInfo,
 		Payload: mustMarshal(room.ToJSON()),

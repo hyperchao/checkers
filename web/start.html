@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>欢乐跳棋</title>
+  <link rel="stylesheet" href="css/style.css">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -294,12 +295,51 @@
     </div>
   </div>
 
+  <div id="gameArea" class="game-page hidden">
+    <main class="game-shell">
+      <header class="game-header">
+        <h1>欢乐跳棋</h1>
+        <div class="header-actions">
+          <button id="btnIds" type="button">格号</button>
+          <button id="btnRestart" type="button">重新开始</button>
+          <button id="btnBack" type="button">返回主页</button>
+        </div>
+      </header>
+
+      <section id="statusBar" class="status-bar">
+        <div id="playerInfo" class="player-info"></div>
+        <div id="turnInfo" class="turn-info">
+          <span id="turnMessage">初始化中...</span>
+          <button id="btnEndJump" type="button" hidden>结束跳跃</button>
+        </div>
+      </section>
+
+      <section class="board-wrap">
+        <canvas id="board" width="700" height="700" aria-label="欢乐跳棋棋盘"></canvas>
+      </section>
+    </main>
+
+    <div id="tooltip" class="tooltip"></div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="board_data.js"></script>
   <script src="js/messages.js"></script>
   <script src="js/network.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/piece.js"></script>
+  <script src="js/board.js"></script>
+  <script src="js/ai.js"></script>
+  <script>
+    window.NO_AUTO_GAME_INIT = true;
+  </script>
+  <script src="js/game.js"></script>
   <script>
     let currentMode = 'local';
     let networkManager = null;
     let roomInfo = null;
+    let webrtcOfferSent = new Set();
 
     const modeTabs = document.querySelectorAll('.mode-tab');
     modeTabs.forEach((tab) => {
@@ -391,26 +431,34 @@
     updateOnlineSeatOptions();
 
     document.getElementById('createRoomBtn').addEventListener('click', async () => {
+      console.log('createRoomBtn clicked');
       hideError();
 
       networkManager = new NetworkManager({
         onRoomInfo: handleRoomInfo,
         onError: showOnlineError,
         onRoomStart: handleRoomStart,
+        onDataChannelReady: handleDataChannelReady,
         onDisconnected: () => {
+          console.log('network disconnected');
           showOnlineError('连接断开');
           resetOnlineUI();
         }
       });
 
       try {
+        console.log('connecting to server...');
         await networkManager.connect();
+        console.log('connected, creating room...');
         await networkManager.createRoom({
           playerCount: Number(onlinePlayerCountSelect.value),
           seatsPerPlayer: Number(onlineSeatsPerPlayerSelect.value),
           maxPlayers: Number(onlinePlayerCountSelect.value)
         });
+        console.log('room created, setting up WebRTC...');
+        await networkManager.setupWebRTC();
       } catch (error) {
+        console.error('create room error:', error);
         showOnlineError('连接服务器失败: ' + error.message);
       }
     });
@@ -428,6 +476,7 @@
         onRoomInfo: handleRoomInfo,
         onError: showOnlineError,
         onRoomStart: handleRoomStart,
+        onDataChannelReady: handleDataChannelReady,
         onDisconnected: () => {
           showOnlineError('连接断开');
           resetOnlineUI();
@@ -437,12 +486,14 @@
       try {
         await networkManager.connect();
         await networkManager.joinRoom(roomCode);
+        await networkManager.setupWebRTC();
       } catch (error) {
         showOnlineError('连接服务器失败: ' + error.message);
       }
     });
 
     function handleRoomInfo(info) {
+      console.log('handleRoomInfo called:', info);
       roomInfo = info;
       document.getElementById('roomCodeDisplay').textContent = info.code;
 
@@ -458,33 +509,60 @@
       const startBtn = document.getElementById('startOnlineBtn');
 
       if (isHost && info.status === 'full') {
-        startBtn.disabled = false;
-        document.getElementById('waitingText').textContent = '房间已满，可以开始游戏';
+        startBtn.disabled = true;
+        document.getElementById('waitingText').textContent = '房间已满，连接中...';
       } else if (isHost) {
-        startBtn.disabled = false;
+        startBtn.disabled = true;
         document.getElementById('waitingText').textContent = '等待其他玩家加入...';
       } else {
         startBtn.disabled = true;
         document.getElementById('waitingText').textContent = '等待房主开始游戏...';
       }
+
+      if (isHost && info.clientIds) {
+        info.clientIds.forEach((clientId) => {
+          if (!webrtcOfferSent.has(clientId)) {
+            webrtcOfferSent.add(clientId);
+            networkManager.sendSDPOffer(clientId);
+          }
+        });
+      }
+    }
+
+    function handleDataChannelReady() {
+      console.log('handleDataChannelReady called, isHost=', roomInfo && roomInfo.hostId === networkManager.peerId);
+      const isHost = roomInfo && roomInfo.hostId === networkManager.peerId;
+      if (isHost) {
+        const startBtn = document.getElementById('startOnlineBtn');
+        startBtn.disabled = false;
+        document.getElementById('waitingText').textContent = '连接已建立，可以开始游戏';
+      }
     }
 
     function handleRoomStart() {
-      sessionStorage.setItem('gameConfig', JSON.stringify({
+      console.log('handleRoomStart called, roomInfo=', roomInfo);
+      document.querySelector('.start-screen').classList.add('hidden');
+      document.getElementById('gameArea').classList.remove('hidden');
+
+      const isHost = roomInfo.hostId === networkManager.peerId;
+      const cfg = roomInfo.config || {};
+
+      console.log('Creating Game with config:', { mode: 'online', network: true, playerCount: cfg.playerCount, seatsPerPlayer: cfg.seatsPerPlayer, isHost });
+
+      window.game = new Game({
         mode: 'online',
         network: true,
-        playerCount: roomInfo.playerCount,
-        seatsPerPlayer: roomInfo.config ? roomInfo.config.seatsPerPlayer : 1,
-        isHost: roomInfo.hostId === networkManager.peerId,
-        roomCode: roomInfo.code
-      }));
-
-      window.location.href = 'game.html';
+        playerCount: cfg.playerCount || 2,
+        seatsPerPlayer: cfg.seatsPerPlayer || 1,
+        isHost: isHost,
+        roomCode: roomInfo.code,
+        networkManager: networkManager
+      });
     }
 
     document.getElementById('startOnlineBtn').addEventListener('click', () => {
       if (networkManager && networkManager.mode === 'host') {
-        networkManager.sendSignaling(NETWORK_MESSAGES.ROOM_START, {});
+        networkManager.broadcastToRoom(createMessage(NETWORK_MESSAGES.ROOM_START, {}));
         handleRoomStart();
       }
     });
@@ -504,6 +582,38 @@
       document.getElementById('joinRoomSection').classList.remove('hidden');
       document.getElementById('roomDisplay').classList.add('hidden');
     }
+
+    document.getElementById('btnBack').addEventListener('click', () => {
+      if (networkManager) {
+        networkManager.disconnect();
+        networkManager = null;
+      }
+      if (window.game) {
+        window.game = null;
+      }
+      document.getElementById('gameArea').classList.add('hidden');
+      document.querySelector('.start-screen').classList.remove('hidden');
+      resetOnlineUI();
+    });
+
+    document.getElementById('btnRestart').addEventListener('click', () => {
+      if (window.game) {
+        window.game.startGame();
+      }
+    });
+
+    document.getElementById('btnIds').addEventListener('click', () => {
+      if (window.game) {
+        window.game.showIds = !window.game.showIds;
+        window.game.render();
+      }
+    });
+
+    document.getElementById('btnEndJump').addEventListener('click', () => {
+      if (window.game) {
+        window.game.endJumpTurn();
+      }
+    });
   </script>
 </body>
 </html>

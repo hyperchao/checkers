@@ -18,8 +18,8 @@
 | N2-1 | 创建 `web/js/messages.js`（消息类型定义） | ✅ 已完成 | join/move/state/leave |
 | N2-2 | 创建 `web/js/network.js`（NetworkManager 类） | ✅ 已完成 | |
 | N2-3 | 实现信令 WebSocket 连接 | ✅ 已完成 | 连接 Go 服务器 |
-| N2-4 | 实现 Host 端：创建房间、RTCPeerConnection、DataChannel | ✅ 已完成 | |
-| N2-5 | 实现 Client 端：加入房间、接收 DataChannel | ✅ 已完成 | |
+| N2-4 | 实现 Host 端：创建房间、RTCPeerConnection、DataChannel | ✅ 已完成 | 房间创建后立即建立 WebRTC 连接 |
+| N2-5 | 实现 Client 端：加入房间、接收 DataChannel | ✅ 已完成 | 加入房间后立即建立 WebRTC 连接 |
 | N2-6 | 实现 ICE Candidate 交换 | ✅ 已完成 | |
 | N2-7 | 实现连接状态管理（连接中/已连接/断开） | ✅ 已完成 | |
 
@@ -29,11 +29,12 @@
 |----|------|------|------|
 | G3-1 | 更新 `start.html`：添加单机/联机模式选择 | ✅ 已完成 | |
 | G3-2 | 更新 `config.js`：添加 mode 配置项 | ✅ 已完成 | local/online |
-| G3-3 | 改造 `game.js`：支持 NetworkManager 注入 | ✅ 已完成 | |
+| G3-3 | 改造 `game.js`：支持 NetworkManager 注入 | ✅ 已完成 | 支持构造函数传入 config 和 networkManager |
 | G3-4 | 实现 Host 模式：验证移动、广播状态 | ✅ 已完成 | |
 | G3-5 | 实现 Client 模式：发送操作、接收状态 | ✅ 已完成 | |
 | G3-6 | 实现房间等待界面（显示已加入玩家） | ✅ 已完成 | |
 | G3-7 | 实现断连处理（Host 断连结束游戏） | ✅ 已完成 | |
+| G3-8 | 改为页面内切换布局（不跳转页面） | ✅ 已完成 | WebSocket/DataChannel 保持连接 |
 
 ## 阶段 4：测试与优化
 
@@ -44,6 +45,7 @@
 | T4-3 | 修复 Critical/Medium bugs（channel panic、race condition、deadlock、DataChannel 时序） | ✅ 已完成 | |
 | T4-4 | 测试断连重连场景 | ⬜ 待开始 | 可选 |
 | T4-5 | 优化状态同步频率（节流/合并） | ✅ 已完成 | |
+| T4-6 | 修复 ROOM_START 消息通过 DataChannel 传输 | ✅ 已完成 | network.js setupDataChannel 添加 ROOM_START 处理 |
 
 ## 阶段 5：部署
 
@@ -61,10 +63,10 @@
 |------|------|
 | 阶段 1：Go 信令服务器 | 6/6 |
 | 阶段 2：WebRTC 网络层 | 7/7 |
-| 阶段 3：游戏逻辑改造 | 7/7 |
-| 阶段 4：测试与优化 | 0/5 |
+| 阶段 3：游戏逻辑改造 | 8/8 |
+| 阶段 4：测试与优化 | 3/6 |
 | 阶段 5：部署 | 0/3 |
-| **总计** | **20/28** |
+| **总计** | **24/30** |
 
 ---
 

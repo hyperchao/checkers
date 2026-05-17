@@ -1,5 +1,5 @@
 class Game {
-  constructor() {
+  constructor(options = {}) {
     this.canvas = document.getElementById('board');
     this.ctx = this.canvas.getContext('2d');
     this.board = new Board(this.canvas.width, CONFIG.HEX_SIZE);
@@ -14,9 +14,9 @@ class Game {
     this.rankings = [];
     this.gameOver = false;
     this.showIds = false;
-    this.config = this.readConfig();
-    this.network = null;
-    this.isHost = false;
+    this.config = options.mode ? { ...this.readConfig(), ...options } : this.readConfig();
+    this.network = options.networkManager || null;
+    this.isHost = options.isHost || false;
     this.myPlayerId = null;
     this.lastStateSync = 0;
     this.networkDisconnected = false;
@@ -35,11 +35,37 @@ class Game {
 
   async initNetwork() {
     if (this.config.mode !== 'online' || !this.config.network) {
+      console.log('initNetwork: local mode, starting game immediately');
       this.startGame();
       return;
     }
 
     this.isHost = this.config.isHost;
+    console.log('initNetwork: online mode, isHost=', this.isHost, 'network exists=', !!this.network);
+
+    if (this.network) {
+      this.network.onGameState = (state) => this.applyRemoteState(state);
+      this.network.onGameMove = (move) => this.applyRemoteMove(move);
+      this.network.onDisconnected = () => this.handleDisconnect();
+      this.network.onGameStateRequest = () => {
+        console.log('onGameStateRequest triggered, isHost=', this.isHost, 'players.length=', this.players.length);
+        if (this.isHost && this.players.length > 0) {
+          this.broadcastState();
+        }
+      };
+
+      console.log('initNetwork: reusing existing network, dataChannels=', this.network.dataChannels.size);
+
+      if (this.isHost) {
+        console.log('initNetwork: host starting game');
+        this.startGame();
+      } else {
+        console.log('initNetwork: client starting game, sending state request');
+        this.startGame();
+        this.network.sendToHost(createMessage(NETWORK_MESSAGES.GAME_STATE, { request: true }));
+      }
+      return;
+    }
 
     this.network = new NetworkManager({
       onGameState: (state) => this.applyRemoteState(state),
@@ -111,6 +137,7 @@ class Game {
   }
 
   startGame() {
+    console.log('startGame called, config=', this.config);
     const requestedHumans = Number(this.config.playerCount) || 2;
     const seatsPerPlayer = Number(this.config.seatsPerPlayer) || 1;
     const controllerCount = requestedHumans === 1 ? 2 : requestedHumans;
@@ -122,6 +149,13 @@ class Game {
       const isRemote = this.config.mode === 'online' && !this.isHost && index !== 0;
       return new Player(index, seats, isAI, this.config.aiDifficulty, isRemote);
     });
+
+    if (this.config.mode === 'online') {
+      this.myPlayerId = this.isHost ? 0 : 1;
+    } else {
+      this.myPlayerId = null;
+    }
+
     this.ai = new AIEngine(this.config.aiDifficulty);
     this.pieces = [];
     this.currentPlayerIndex = 0;
@@ -164,6 +198,8 @@ class Game {
 
   handleClick(event) {
     if (this.gameOver || this.currentPlayer.isAI) return;
+
+    if (this.config.mode === 'online' && this.currentPlayer.id !== this.myPlayerId) return;
 
     if (this.config.mode === 'online' && !this.isHost) {
       this.handleClientClick(event);
@@ -295,10 +331,16 @@ class Game {
       this.audio.play('move');
     }
 
+    this.selectedPiece = null;
+    this.validMoves = [];
     this.render();
+    this.updateStatusBar();
+
+    this.endTurn();
   }
 
   applyRemoteState(state) {
+    console.log('applyRemoteState called, pieces count=', state.pieces.length, 'my pieces count=', this.pieces.length);
     this.board.resetPieces();
 
     state.pieces.forEach((pieceData) => {
@@ -325,11 +367,12 @@ class Game {
     this.network.broadcastToRoom(createMessage(NETWORK_MESSAGES.GAME_MOVE, move));
   }
 
-  broadcastState() {
+  broadcastState(force = false) {
     if (!this.network) return;
 
     const now = Date.now();
-    if (now - this.lastStateSync < CONFIG.NETWORK.STATE_SYNC_THROTTLE) {
+    if (!force && now - this.lastStateSync < CONFIG.NETWORK.STATE_SYNC_THROTTLE) {
+      console.log('broadcastState throttled');
       return;
     }
     this.lastStateSync = now;
@@ -341,6 +384,7 @@ class Game {
       rankings: this.rankings
     };
 
+    console.log('broadcastState: sending state with', state.pieces.length, 'pieces');
     this.network.broadcastToRoom(createMessage(NETWORK_MESSAGES.GAME_STATE, state));
   }
 
@@ -375,7 +419,7 @@ class Game {
       this.showGameOver();
 
       if (this.isHost && this.network) {
-        this.broadcastState();
+        this.broadcastState(true);
       }
       return;
     }
@@ -385,7 +429,7 @@ class Game {
     this.updateStatusBar();
 
     if (this.isHost && this.network) {
-      this.broadcastState();
+      this.broadcastState(true);
     }
 
     if (this.currentPlayer.isAI) {
@@ -425,7 +469,6 @@ class Game {
       this.networkDisconnected = true;
       this.render();
     }
-  }
   }
 
   showGameOver() {
@@ -548,5 +591,6 @@ class Game {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  if (window.NO_AUTO_GAME_INIT) return;
   window.game = new Game();
 });

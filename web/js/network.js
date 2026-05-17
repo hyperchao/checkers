@@ -18,6 +18,7 @@ class NetworkManager {
     this.onGameState = options.onGameState || (() => {});
     this.onRoomStart = options.onRoomStart || (() => {});
     this.onDisconnected = options.onDisconnected || (() => {});
+    this.onDataChannelReady = options.onDataChannelReady || (() => {});
 
     this.connectionState = 'disconnected';
     this.messageQueue = [];
@@ -39,13 +40,13 @@ class NetworkManager {
       this.ws = new WebSocket(`${this.wsUrl}?id=${this.peerId}`);
 
       this.ws.onopen = () => {
-        console.log('WebSocket connected');
+        console.log('WebSocket connected, readyState=', this.ws.readyState);
         this.setState('connected');
         resolve();
       };
 
-      this.ws.onclose = () => {
-        console.log('WebSocket disconnected');
+      this.ws.onclose = (event) => {
+        console.log('WebSocket disconnected, code=', event.code, 'reason=', event.reason, 'wasClean=', event.wasClean);
         this.setState('disconnected');
         this.onDisconnected();
       };
@@ -74,56 +75,69 @@ class NetworkManager {
   }
 
   handleMessage(data) {
-    const msg = deserializeMessage(data);
-    if (!msg) return;
+    console.log('WebSocket raw message:', data.substring(0, 200));
+    
+    // Handle multiple messages separated by newlines
+    const messages = data.split('\n').filter(line => line.trim());
+    
+    for (const msgData of messages) {
+      const msg = deserializeMessage(msgData);
+      if (!msg) continue;
 
-    switch (msg.type) {
-      case NETWORK_MESSAGES.ROOM_INFO:
-        this.roomInfo = msg.payload;
-        this.roomCode = msg.payload.code;
-        this.onRoomInfo(msg.payload);
-        break;
+      console.log('WebSocket received message:', msg.type, 'payload:', msg.payload);
 
-      case NETWORK_MESSAGES.SDP_OFFER:
-        this.handleSDPOffer(msg.payload);
-        break;
+      switch (msg.type) {
+        case NETWORK_MESSAGES.ROOM_INFO:
+          console.log('ROOM_INFO received, calling onRoomInfo');
+          this.roomInfo = msg.payload;
+          this.roomCode = msg.payload.code;
+          this.onRoomInfo(msg.payload);
+          break;
 
-      case NETWORK_MESSAGES.SDP_ANSWER:
-        this.handleSDPAnswer(msg.payload);
-        break;
+        case NETWORK_MESSAGES.SDP_OFFER:
+          this.handleSDPOffer(msg.payload);
+          break;
 
-      case NETWORK_MESSAGES.ICE_CANDIDATE:
-        this.handleICECandidate(msg.payload);
-        break;
+        case NETWORK_MESSAGES.SDP_ANSWER:
+          this.handleSDPAnswer(msg.payload);
+          break;
 
-      case NETWORK_MESSAGES.ROOM_START:
-        this.onRoomStart();
-        break;
+        case NETWORK_MESSAGES.ICE_CANDIDATE:
+          this.handleICECandidate(msg.payload);
+          break;
 
-      case NETWORK_MESSAGES.GAME_MOVE:
-        this.onGameMove(msg.payload);
-        break;
+        case NETWORK_MESSAGES.ROOM_START:
+          this.onRoomStart();
+          break;
 
-      case NETWORK_MESSAGES.GAME_STATE:
-        this.onGameState(msg.payload);
-        break;
+        case NETWORK_MESSAGES.GAME_MOVE:
+          this.onGameMove(msg.payload);
+          break;
 
-      case NETWORK_MESSAGES.ERROR:
-        this.onError((msg.payload && msg.payload.message) || 'Unknown error');
-        break;
+        case NETWORK_MESSAGES.GAME_STATE:
+          this.onGameState(msg.payload);
+          break;
+
+        case NETWORK_MESSAGES.ERROR:
+          this.onError((msg.payload && msg.payload.message) || 'Unknown error');
+          break;
+      }
     }
   }
 
   sendSignaling(type, payload) {
+    console.log('sendSignaling:', type, 'ws readyState:', this.ws ? this.ws.readyState : 'null');
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn('WebSocket not connected, cannot send:', type);
       return;
     }
     const msg = createMessage(type, payload);
+    console.log('sendSignaling: sending', JSON.stringify(msg).substring(0, 100));
     this.ws.send(serializeMessage(msg));
   }
 
   createRoom(config = {}) {
+    console.log('createRoom called, ws state:', this.ws ? this.ws.readyState : 'no ws');
     this.mode = 'host';
     this.sendSignaling(NETWORK_MESSAGES.CREATE_ROOM, {
       playerCount: config.playerCount || 2,
@@ -170,12 +184,10 @@ class NetworkManager {
       }
     };
 
-    if (this.mode === 'host') {
-      this.peerConnection.ondatachannel = (event) => {
-        const channel = event.channel;
-        this.setupDataChannel(channel);
-      };
-    }
+    this.peerConnection.ondatachannel = (event) => {
+      const channel = event.channel;
+      this.setupDataChannel(channel);
+    };
   }
 
   async createDataChannel(label) {
@@ -191,34 +203,37 @@ class NetworkManager {
     return channel;
   }
 
-  setupDataChannel(channel) {
-    channel.onopen = () => {
-      console.log('DataChannel opened:', channel.label);
-      this.dataChannels.set(channel.label, channel);
-      this.flushMessageQueue();
-    };
+  async setupWebRTC() {
+    await this.createPeerConnection();
 
-    channel.onclose = () => {
-      console.log('DataChannel closed:', channel.label);
-      this.dataChannels.delete(channel.label);
-    };
+    if (this.mode === 'host') {
+      const channel = this.peerConnection.createDataChannel('game', {
+        ordered: true
+      });
+      this.setupDataChannel(channel);
+    }
+  }
 
-    channel.onmessage = (event) => {
-      const msg = deserializeMessage(event.data);
-      if (!msg) return;
+  async sendSDPOffer(targetId) {
+    console.log('sendSDPOffer to', targetId);
+    if (!this.peerConnection) {
+      await this.createPeerConnection();
+    }
 
-      switch (msg.type) {
-        case NETWORK_MESSAGES.GAME_MOVE:
-          this.onGameMove(msg.payload);
-          break;
-        case NETWORK_MESSAGES.GAME_STATE:
-          this.onGameState(msg.payload);
-          break;
-      }
-    };
+    const offer = await this.peerConnection.createOffer();
+    await this.peerConnection.setLocalDescription(offer);
+
+    this.sendSignaling(NETWORK_MESSAGES.SDP_OFFER, {
+      roomCode: this.roomCode,
+      targetId: targetId,
+      sdp: JSON.stringify(offer),
+      type: 'offer'
+    });
+    console.log('sendSDPOffer: sent offer to', targetId);
   }
 
   async handleSDPOffer(payload) {
+    console.log('handleSDPOffer received from', payload.fromId);
     if (!this.peerConnection) {
       await this.createPeerConnection();
     }
@@ -229,6 +244,7 @@ class NetworkManager {
     const answer = await this.peerConnection.createAnswer();
     await this.peerConnection.setLocalDescription(answer);
 
+    console.log('handleSDPOffer: sending SDP answer to', payload.fromId);
     this.sendSignaling(NETWORK_MESSAGES.SDP_ANSWER, {
       roomCode: this.roomCode,
       targetId: payload.fromId,
@@ -245,11 +261,50 @@ class NetworkManager {
     }
   }
 
+  setupDataChannel(channel) {
+    channel.onopen = () => {
+      console.log('DataChannel opened:', channel.label, 'mode=', this.mode);
+      this.dataChannels.set(channel.label, channel);
+      this.flushMessageQueue();
+      this.onDataChannelReady();
+    };
+
+    channel.onclose = () => {
+      console.log('DataChannel closed:', channel.label);
+      this.dataChannels.delete(channel.label);
+    };
+
+    channel.onmessage = (event) => {
+      const msg = deserializeMessage(event.data);
+      if (!msg) return;
+
+      console.log('DataChannel received message:', msg.type, msg.payload);
+
+      switch (msg.type) {
+        case NETWORK_MESSAGES.GAME_MOVE:
+          this.onGameMove(msg.payload);
+          break;
+        case NETWORK_MESSAGES.GAME_STATE:
+          if (msg.payload && msg.payload.request) {
+            this.onGameStateRequest && this.onGameStateRequest();
+          } else {
+            this.onGameState(msg.payload);
+          }
+          break;
+        case NETWORK_MESSAGES.ROOM_START:
+          this.onRoomStart();
+          break;
+      }
+    };
+  }
+
   async handleSDPAnswer(payload) {
+    console.log('handleSDPAnswer received from', payload.fromId);
     if (!this.peerConnection) return;
 
     const sdp = JSON.parse(payload.sdp);
     await this.peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+    console.log('handleSDPAnswer: remote description set');
 
     if (this.pendingCandidates.has(payload.fromId)) {
       const candidates = this.pendingCandidates.get(payload.fromId);
@@ -277,23 +332,31 @@ class NetworkManager {
 
   broadcastToRoom(message) {
     const data = serializeMessage(message);
+    console.log('broadcastToRoom: sending message type=', message.type, 'channels=', this.dataChannels.size);
     this.dataChannels.forEach((channel) => {
       if (channel.readyState === 'open') {
         channel.send(data);
       } else {
+        console.log('broadcastToRoom: channel not open, state=', channel.readyState);
         this.messageQueue.push(data);
       }
     });
   }
 
   sendToHost(message) {
+    console.log('sendToHost called, dataChannels size=', this.dataChannels.size);
     if (this.dataChannels.size === 0) {
+      console.log('sendToHost: no data channels, queuing message');
       this.messageQueue.push(serializeMessage(message));
       return;
     }
     const channel = this.dataChannels.values().next().value;
     if (channel.readyState === 'open') {
+      console.log('sendToHost: sending via data channel');
       channel.send(serializeMessage(message));
+    } else {
+      console.log('sendToHost: channel not open, queuing message, state=', channel.readyState);
+      this.messageQueue.push(serializeMessage(message));
     }
   }
 
