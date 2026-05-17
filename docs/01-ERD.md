@@ -1,6 +1,6 @@
 # 欢乐跳棋 - ERD
 
-## 1. 核心模型
+## 1. 核心模型（单机）
 
 ```mermaid
 erDiagram
@@ -12,7 +12,88 @@ erDiagram
   CELL }o--o| CORNER : belongs_to
 ```
 
-## 2. Game
+## 2. 联机架构模型
+
+```mermaid
+erDiagram
+  SIGNALING_SERVER ||--o{ ROOM : manages
+  ROOM ||--|| HOST : has
+  ROOM ||--o{ CLIENT : has
+  HOST ||--o{ CLIENT : "WebRTC DataChannel"
+  HOST ||--|| GAME_STATE : authoritative
+  CLIENT ||--|| GAME_STATE : synchronized
+```
+
+## 3. 信令服务器模型（Go）
+
+```text
+RoomManager
+- rooms: Map<string, Room>
+- CreateRoom(config) -> Room
+- JoinRoom(code, peer) -> Room
+- ExchangeSDP(roomCode, sdp) -> AnswerSDP
+- ExchangeICE(roomCode, candidate) -> void
+
+Room
+- code: string (6位随机码)
+- host: Peer (WebSocket连接)
+- clients: Peer[]
+- config: { playerCount, seatsPerPlayer }
+- status: "waiting" | "playing" | "full"
+
+Peer
+- id: string
+- wsConn: WebSocket
+- sdpOffer: SessionDescription
+- sdpAnswer: SessionDescription
+- iceCandidates: Candidate[]
+```
+
+## 4. WebRTC 连接模型
+
+```text
+Host (创建者)
+- 创建 RTCPeerConnection
+- 为每个 Client 创建 DataChannel
+- 权威游戏状态持有者
+- 广播游戏事件给所有 Client
+
+Client (加入者)
+- 创建 RTCPeerConnection
+- 接收 Host 的 DataChannel
+- 发送操作到 Host
+- 接收并应用游戏状态更新
+```
+
+## 5. 联机消息协议
+
+```text
+Message (JSON over DataChannel)
+- type: "join" | "start" | "move" | "state" | "chat" | "leave"
+- payload: object
+- timestamp: number
+
+JoinMessage
+- playerId: number
+- playerName: string
+- seats: number[]
+
+MoveMessage
+- pieceId: number
+- fromCellId: number
+- toCellId: number
+- moveType: "move" | "jump"
+- jumpChain: JumpStep[]
+
+StateMessage
+- board: Cell[]
+- players: Player[]
+- currentPlayerIndex: number
+- gameOver: boolean
+- rankings: number[]
+```
+
+## 6. Game (扩展)
 
 ```text
 - board: Board
@@ -24,12 +105,35 @@ erDiagram
 - jumpChain: JumpStep[]
 - rankings: number[]
 - gameOver: boolean
-- config: { playerCount, aiDifficulty }
+- config: { playerCount, aiDifficulty, mode: "local" | "online" }
+- network: NetworkManager | null
 ```
 
-`playerCount` 表示人类玩家设置。1 人局会自动补 1 个 AI 控制者。
+`mode` 区分单机/联机模式。联机模式下，主机负责游戏逻辑，客户端接收状态同步。
 
-## 3. Board
+## 7. NetworkManager (新增)
+
+```text
+- mode: "host" | "client"
+- peerConnection: RTCPeerConnection
+- dataChannels: Map<number, DataChannel>
+- signalingWs: WebSocket | null
+- roomCode: string
+- myPlayerId: number
+
+Host 方法:
+- broadcastMove(move: Move)
+- broadcastState(state: GameState)
+- handleClientMove(clientId, move)
+- validateMove(move) -> boolean
+
+Client 方法:
+- sendMove(move: Move)
+- applyState(state: GameState)
+- requestJoin(roomCode)
+```
+
+## 8. Board
 
 ```text
 - cells: Cell[]
@@ -45,7 +149,7 @@ erDiagram
 - 生成单步移动和跳跃移动
 - 将 axial 坐标转换为 Canvas 像素坐标
 
-## 4. Cell
+## 9. Cell
 
 ```text
 - id: number
@@ -65,7 +169,7 @@ erDiagram
 - 角4：102-111
 - 角5：112-121
 
-## 5. Player
+## 10. Player
 
 ```text
 - id: number
@@ -75,6 +179,7 @@ erDiagram
 - color: string
 - pieces: Piece[]
 - name: string
+- isRemote: boolean (联机模式标识)
 ```
 
 说明：
@@ -83,8 +188,9 @@ erDiagram
 - `seats` 是该控制者拥有的角区列表。
 - 一个玩家可以控制多个角区。
 - `isFinished` 由全部棋子是否进入各自目标角派生。
+- 联机模式下，`isRemote` 标识该玩家是否在远程浏览器。
 
-## 6. Piece
+## 11. Piece
 
 ```text
 - id: number
@@ -100,7 +206,7 @@ erDiagram
 - 目标角通过 `getTargetCorner(seatId)` 派生。
 - 同一玩家控制多个角区时，不同棋子的目标角可能不同。
 
-## 7. Move
+## 12. Move
 
 ```text
 - type: "move" | "jump"
@@ -111,7 +217,7 @@ erDiagram
 
 当前实现逐跳执行。单步移动后结束回合；跳跃后若仍有跳跃目标，玩家可以继续跳跃，也可以主动结束回合。
 
-## 8. Seat Assignment
+## 13. Seat Assignment
 
 座位分配由 `getSeatAssignments(controllerCount, seatsPerPlayer)` 统一产生。
 
@@ -136,4 +242,4 @@ controllerCount * seatsPerPlayer <= 6
 6x1: [[0], [1], [2], [3], [4], [5]]
 ```
 
-*最后更新：2026-05-15*
+*最后更新：2026-05-17*
