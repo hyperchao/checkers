@@ -27,10 +27,37 @@
       color: #888;
       margin-bottom: 40px;
     }
+    .mode-tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 0;
+    }
+    .mode-tab {
+      flex: 1;
+      padding: 12px 24px;
+      border: none;
+      background: #0f3460;
+      color: #888;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+      border-radius: 8px 8px 0 0;
+    }
+    .mode-tab:first-child {
+      border-radius: 8px 0 0 0;
+    }
+    .mode-tab:last-child {
+      border-radius: 0 8px 0 0;
+    }
+    .mode-tab.active {
+      background: #16213e;
+      color: #fff;
+    }
     .setup-box {
       background: #16213e;
       padding: 30px 40px;
-      border-radius: 15px;
+      border-radius: 0 0 15px 15px;
       display: inline-block;
       text-align: left;
       box-shadow: 0 10px 30px rgba(0,0,0,0.3);
@@ -48,7 +75,8 @@
       font-size: 14px;
       color: #aaa;
     }
-    .setting select {
+    .setting select,
+    .setting input {
       width: 100%;
       padding: 12px;
       border-radius: 8px;
@@ -58,7 +86,11 @@
       font-size: 16px;
       cursor: pointer;
     }
-    .setting select:focus {
+    .setting input {
+      cursor: text;
+    }
+    .setting select:focus,
+    .setting input:focus {
       outline: 2px solid #e94560;
     }
     .setting select option:disabled {
@@ -89,6 +121,39 @@
       transform: scale(1.02);
       background: linear-gradient(135deg, #f05670 0%, #e94560 100%);
     }
+    .btn-secondary {
+      background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    }
+    .btn-secondary:hover {
+      background: linear-gradient(135deg, #4aa3df 0%, #3498db 100%);
+    }
+    .room-info {
+      background: #0f3460;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      text-align: center;
+    }
+    .room-code {
+      font-size: 32px;
+      font-weight: bold;
+      letter-spacing: 8px;
+      color: #4ecdc4;
+      margin: 10px 0;
+    }
+    .player-list {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #aaa;
+    }
+    .waiting-text {
+      color: #f39c12;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
     .rules {
       margin-top: 30px;
       padding: 20px;
@@ -107,50 +172,116 @@
     .rules li {
       margin-bottom: 5px;
     }
+    .hidden {
+      display: none !important;
+    }
+    .error-msg {
+      color: #e94560;
+      font-size: 14px;
+      margin-top: 10px;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
   <div class="start-screen">
     <h1>🎮 欢乐跳棋</h1>
     <p>六角棋盘多人对弈</p>
-    
+
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-mode="local">单机模式</button>
+      <button class="mode-tab" data-mode="online">联机模式</button>
+    </div>
+
     <div class="setup-box">
-      <h3>游戏设置</h3>
-      
-      <div class="setting">
-        <label>👥 玩家数量</label>
-        <select id="playerCount">
-          <option value="1">1人 (自动补AI)</option>
-          <option value="2" selected>2人</option>
-          <option value="3">3人</option>
-          <option value="4">4人</option>
-          <option value="5">5人</option>
-          <option value="6">6人</option>
-        </select>
+      <div id="localSetup">
+        <h3>单机设置</h3>
+
+        <div class="setting">
+          <label>👥 玩家数量</label>
+          <select id="playerCount">
+            <option value="1">1人 (自动补AI)</option>
+            <option value="2" selected>2人</option>
+            <option value="3">3人</option>
+            <option value="4">4人</option>
+            <option value="5">5人</option>
+            <option value="6">6人</option>
+          </select>
+        </div>
+
+        <div class="setting">
+          <label>🔺 每名玩家控制角区数</label>
+          <select id="seatsPerPlayer">
+            <option value="1">1个角区</option>
+            <option value="2">2个角区</option>
+            <option value="3" selected>3个角区</option>
+          </select>
+          <div id="setupHint" class="setting-hint"></div>
+        </div>
+
+        <div class="setting">
+          <label>🤖 AI难度</label>
+          <select id="aiDifficulty">
+            <option value="easy">简单</option>
+            <option value="medium" selected>中等</option>
+            <option value="hard">困难</option>
+          </select>
+        </div>
+
+        <button class="btn-start" id="startLocalBtn">开始游戏</button>
       </div>
 
-      <div class="setting">
-        <label>🔺 每名玩家控制角区数</label>
-        <select id="seatsPerPlayer">
-          <option value="1">1个角区</option>
-          <option value="2">2个角区</option>
-          <option value="3" selected>3个角区</option>
-        </select>
-        <div id="setupHint" class="setting-hint"></div>
+      <div id="onlineSetup" class="hidden">
+        <h3>联机设置</h3>
+
+        <div class="setting">
+          <label>👥 玩家数量</label>
+          <select id="onlinePlayerCount">
+            <option value="2" selected>2人</option>
+            <option value="3">3人</option>
+            <option value="4">4人</option>
+            <option value="5">5人</option>
+            <option value="6">6人</option>
+          </select>
+        </div>
+
+        <div class="setting">
+          <label>🔺 每名玩家控制角区数</label>
+          <select id="onlineSeatsPerPlayer">
+            <option value="1" selected>1个角区</option>
+            <option value="2">2个角区</option>
+            <option value="3">3个角区</option>
+          </select>
+          <div id="onlineSetupHint" class="setting-hint"></div>
+        </div>
+
+        <div id="roomCreation">
+          <button class="btn-start" id="createRoomBtn">创建房间</button>
+        </div>
+
+        <div id="roomDisplay" class="hidden">
+          <div class="room-info">
+            <div>房间号</div>
+            <div class="room-code" id="roomCodeDisplay">------</div>
+            <div class="player-list" id="playerList">等待玩家加入...</div>
+          </div>
+          <div class="waiting-text" id="waitingText">等待其他玩家加入...</div>
+          <button class="btn-start btn-secondary" id="startOnlineBtn" disabled>开始游戏</button>
+        </div>
+
+        <div id="joinRoomSection" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #0f3460;">
+          <h4 style="text-align: center; margin-bottom: 15px; color: #aaa;">或加入房间</h4>
+          <div class="setting">
+            <label>房间号</label>
+            <input type="text" id="roomCodeInput" placeholder="输入6位房间号" maxlength="6" style="text-transform: uppercase; text-align: center; letter-spacing: 4px;">
+          </div>
+          <button class="btn-start btn-secondary" id="joinRoomBtn">加入房间</button>
+        </div>
+
+        <div id="onlineError" class="error-msg hidden"></div>
       </div>
-      
-      <div class="setting">
-        <label>🤖 AI难度</label>
-        <select id="aiDifficulty">
-          <option value="easy">简单</option>
-          <option value="medium" selected>中等</option>
-          <option value="hard">困难</option>
-        </select>
-      </div>
-      
-      <button class="btn-start" id="startBtn">开始游戏</button>
     </div>
-    
+
     <div class="rules">
       <h4>📖 游戏规则</h4>
       <ul>
@@ -162,17 +293,38 @@
       </ul>
     </div>
   </div>
-  
+
+  <script src="js/messages.js"></script>
+  <script src="js/network.js"></script>
   <script>
-    document.getElementById('startBtn').addEventListener('click', () => {
+    let currentMode = 'local';
+    let networkManager = null;
+    let roomInfo = null;
+
+    const modeTabs = document.querySelectorAll('.mode-tab');
+    modeTabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        modeTabs.forEach((t) => t.classList.remove('active'));
+        tab.classList.add('active');
+        currentMode = tab.dataset.mode;
+
+        document.getElementById('localSetup').classList.toggle('hidden', currentMode !== 'local');
+        document.getElementById('onlineSetup').classList.toggle('hidden', currentMode !== 'online');
+      });
+    });
+
+    document.getElementById('startLocalBtn').addEventListener('click', () => {
       const playerCount = document.getElementById('playerCount').value;
       const seatsPerPlayer = document.getElementById('seatsPerPlayer').value;
       const aiDifficulty = document.getElementById('aiDifficulty').value;
-      
-      // 存储配置到sessionStorage
-      sessionStorage.setItem('gameConfig', JSON.stringify({ playerCount, seatsPerPlayer, aiDifficulty }));
-      
-      // 跳转到游戏页面
+
+      sessionStorage.setItem('gameConfig', JSON.stringify({
+        mode: 'local',
+        playerCount,
+        seatsPerPlayer,
+        aiDifficulty
+      }));
+
       window.location.href = 'game.html';
     });
 
@@ -209,6 +361,149 @@
     playerCountSelect.addEventListener('change', updateSeatOptions);
     seatsPerPlayerSelect.addEventListener('change', updateSeatOptions);
     updateSeatOptions();
+
+    const onlinePlayerCountSelect = document.getElementById('onlinePlayerCount');
+    const onlineSeatsPerPlayerSelect = document.getElementById('onlineSeatsPerPlayer');
+    const onlineSetupHint = document.getElementById('onlineSetupHint');
+
+    function updateOnlineSeatOptions() {
+      const controllerCount = Number(onlinePlayerCountSelect.value);
+      let bestEnabled = null;
+
+      Array.from(onlineSeatsPerPlayerSelect.options).forEach((option) => {
+        const seats = Number(option.value);
+        const disabled = controllerCount * seats > 6;
+        option.disabled = disabled;
+        if (!disabled) bestEnabled = option.value;
+      });
+
+      if (onlineSeatsPerPlayerSelect.selectedOptions[0].disabled) {
+        onlineSeatsPerPlayerSelect.value = bestEnabled || '1';
+      }
+
+      const seatsPerPlayer = Number(onlineSeatsPerPlayerSelect.value);
+      const totalSeats = controllerCount * seatsPerPlayer;
+      onlineSetupHint.textContent = `共 ${controllerCount} 名玩家，占用 ${totalSeats}/6 个角区。`;
+    }
+
+    onlinePlayerCountSelect.addEventListener('change', updateOnlineSeatOptions);
+    onlineSeatsPerPlayerSelect.addEventListener('change', updateOnlineSeatOptions);
+    updateOnlineSeatOptions();
+
+    document.getElementById('createRoomBtn').addEventListener('click', async () => {
+      hideError();
+
+      networkManager = new NetworkManager({
+        onRoomInfo: handleRoomInfo,
+        onError: showOnlineError,
+        onRoomStart: handleRoomStart,
+        onDisconnected: () => {
+          showOnlineError('连接断开');
+          resetOnlineUI();
+        }
+      });
+
+      try {
+        await networkManager.connect();
+        await networkManager.createRoom({
+          playerCount: Number(onlinePlayerCountSelect.value),
+          seatsPerPlayer: Number(onlineSeatsPerPlayerSelect.value),
+          maxPlayers: Number(onlinePlayerCountSelect.value)
+        });
+      } catch (error) {
+        showOnlineError('连接服务器失败: ' + error.message);
+      }
+    });
+
+    document.getElementById('joinRoomBtn').addEventListener('click', async () => {
+      hideError();
+      const roomCode = document.getElementById('roomCodeInput').value.trim().toUpperCase();
+
+      if (roomCode.length !== 6) {
+        showOnlineError('请输入6位房间号');
+        return;
+      }
+
+      networkManager = new NetworkManager({
+        onRoomInfo: handleRoomInfo,
+        onError: showOnlineError,
+        onRoomStart: handleRoomStart,
+        onDisconnected: () => {
+          showOnlineError('连接断开');
+          resetOnlineUI();
+        }
+      });
+
+      try {
+        await networkManager.connect();
+        await networkManager.joinRoom(roomCode);
+      } catch (error) {
+        showOnlineError('连接服务器失败: ' + error.message);
+      }
+    });
+
+    function handleRoomInfo(info) {
+      roomInfo = info;
+      document.getElementById('roomCodeDisplay').textContent = info.code;
+
+      const playerCount = info.playerCount || 1;
+      const maxPlayers = info.maxPlayers || 6;
+      document.getElementById('playerList').textContent = `玩家: ${playerCount}/${maxPlayers}`;
+
+      document.getElementById('roomCreation').classList.add('hidden');
+      document.getElementById('joinRoomSection').classList.add('hidden');
+      document.getElementById('roomDisplay').classList.remove('hidden');
+
+      const isHost = info.hostId === networkManager.peerId;
+      const startBtn = document.getElementById('startOnlineBtn');
+
+      if (isHost && info.status === 'full') {
+        startBtn.disabled = false;
+        document.getElementById('waitingText').textContent = '房间已满，可以开始游戏';
+      } else if (isHost) {
+        startBtn.disabled = false;
+        document.getElementById('waitingText').textContent = '等待其他玩家加入...';
+      } else {
+        startBtn.disabled = true;
+        document.getElementById('waitingText').textContent = '等待房主开始游戏...';
+      }
+    }
+
+    function handleRoomStart() {
+      sessionStorage.setItem('gameConfig', JSON.stringify({
+        mode: 'online',
+        network: true,
+        playerCount: roomInfo.playerCount,
+        seatsPerPlayer: roomInfo.config ? roomInfo.config.seatsPerPlayer : 1,
+        isHost: roomInfo.hostId === networkManager.peerId,
+        roomCode: roomInfo.code
+      }));
+
+      window.location.href = 'game.html';
+    }
+
+    document.getElementById('startOnlineBtn').addEventListener('click', () => {
+      if (networkManager && networkManager.mode === 'host') {
+        networkManager.sendSignaling(NETWORK_MESSAGES.ROOM_START, {});
+        handleRoomStart();
+      }
+    });
+
+    function showOnlineError(msg) {
+      const errorEl = document.getElementById('onlineError');
+      errorEl.textContent = msg;
+      errorEl.classList.remove('hidden');
+    }
+
+    function hideError() {
+      document.getElementById('onlineError').classList.add('hidden');
+    }
+
+    function resetOnlineUI() {
+      document.getElementById('roomCreation').classList.remove('hidden');
+      document.getElementById('joinRoomSection').classList.remove('hidden');
+      document.getElementById('roomDisplay').classList.add('hidden');
+    }
   </script>
 </body>
 </html>

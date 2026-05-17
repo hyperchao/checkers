@@ -1,9 +1,10 @@
 class Player {
-  constructor(id, seats, isAI = false, difficulty = 'medium') {
+  constructor(id, seats, isAI = false, difficulty = 'medium', isRemote = false) {
     this.id = id;
     this.seats = seats;
     this.isAI = isAI;
     this.difficulty = difficulty;
+    this.isRemote = isRemote;
     this.color = CONFIG.COLORS.PLAYERS[id % CONFIG.COLORS.PLAYERS.length];
     this.pieces = [];
     this.name = `${isAI ? 'AI' : '玩家'}${id + 1}`;

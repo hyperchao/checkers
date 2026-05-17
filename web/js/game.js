@@ -15,12 +15,16 @@ class Game {
     this.gameOver = false;
     this.showIds = false;
     this.config = this.readConfig();
+    this.network = null;
+    this.isHost = false;
+    this.myPlayerId = null;
+    this.lastStateSync = 0;
     this.setupEvents();
-    this.startGame();
+    this.initNetwork();
   }
 
   readConfig() {
-    const fallback = { playerCount: 2, seatsPerPlayer: 3, aiDifficulty: 'medium' };
+    const fallback = { mode: 'local', playerCount: 2, seatsPerPlayer: 3, aiDifficulty: 'medium' };
     try {
       return { ...fallback, ...JSON.parse(sessionStorage.getItem('gameConfig') || '{}') };
     } catch (error) {
@@ -28,8 +32,50 @@ class Game {
     }
   }
 
+  async initNetwork() {
+    if (this.config.mode !== 'online' || !this.config.network) {
+      this.startGame();
+      return;
+    }
+
+    this.isHost = this.config.isHost;
+
+    this.network = new NetworkManager({
+      onGameState: (state) => this.applyRemoteState(state),
+      onGameMove: (move) => this.applyRemoteMove(move),
+      onDisconnected: () => this.handleDisconnect()
+    });
+
+    try {
+      await this.network.connect();
+
+      if (this.isHost) {
+        await this.network.createPeerConnection();
+        await this.network.createDataChannel('game');
+
+        this.network.onStateChange = (state) => {
+          if (state === 'connected' && this.network.dataChannels.size > 0) {
+            this.startGame();
+          }
+        };
+      } else {
+        this.network.onStateChange = (state) => {
+          if (state === 'connected' && this.network.dataChannels.size > 0) {
+            this.network.sendToHost(createMessage(NETWORK_MESSAGES.GAME_STATE, { request: true }));
+          }
+        };
+      }
+    } catch (error) {
+      console.error('Failed to initialize network:', error);
+      this.startGame();
+    }
+  }
+
   setupEvents() {
     document.getElementById('btnBack').addEventListener('click', () => {
+      if (this.network) {
+        this.network.disconnect();
+      }
       window.location.href = 'start.html';
     });
 
@@ -61,8 +107,9 @@ class Game {
 
     this.board = new Board(this.canvas.width, CONFIG.HEX_SIZE);
     this.players = assignments.map((seats, index) => {
-      const isAI = requestedHumans === 1 && index === 1;
-      return new Player(index, seats, isAI, this.config.aiDifficulty);
+      const isAI = this.config.mode === 'local' && requestedHumans === 1 && index === 1;
+      const isRemote = this.config.mode === 'online' && !this.isHost && index !== 0;
+      return new Player(index, seats, isAI, this.config.aiDifficulty, isRemote);
     });
     this.ai = new AIEngine(this.config.aiDifficulty);
     this.pieces = [];
@@ -75,6 +122,10 @@ class Game {
     this.initPieces();
     this.render();
     this.updateStatusBar();
+
+    if (this.isHost && this.network) {
+      this.broadcastState();
+    }
 
     if (this.currentPlayer.isAI) {
       window.setTimeout(() => this.doAITurn(), CONFIG.AI_THINK_DELAY);
@@ -103,6 +154,11 @@ class Game {
   handleClick(event) {
     if (this.gameOver || this.currentPlayer.isAI) return;
 
+    if (this.config.mode === 'online' && !this.isHost) {
+      this.handleClientClick(event);
+      return;
+    }
+
     const rect = this.canvas.getBoundingClientRect();
     const cell = this.board.findCellAtPixel(event.clientX - rect.left, event.clientY - rect.top);
     if (!cell) return;
@@ -124,6 +180,39 @@ class Game {
     if (!move) return;
 
     this.applyMove(this.selectedPiece, move);
+  }
+
+  handleClientClick(event) {
+    const rect = this.canvas.getBoundingClientRect();
+    const cell = this.board.findCellAtPixel(event.clientX - rect.left, event.clientY - rect.top);
+    if (!cell) return;
+
+    const clickedPiece = cell.piece;
+
+    if (this.jumpChain.length > 0 && clickedPiece === this.selectedPiece) {
+      this.network.sendToHost(createMessage(NETWORK_MESSAGES.GAME_MOVE, {
+        type: 'end_jump'
+      }));
+      return;
+    }
+
+    if (clickedPiece && this.currentPlayer.ownsPiece(clickedPiece) && this.jumpChain.length === 0) {
+      this.selectPiece(clickedPiece);
+      return;
+    }
+
+    if (!this.selectedPiece || clickedPiece) return;
+
+    const move = this.validMoves.find((item) => item.cellId === cell.id);
+    if (!move) return;
+
+    this.network.sendToHost(createMessage(NETWORK_MESSAGES.GAME_MOVE, {
+      pieceId: this.selectedPiece.id,
+      fromCellId: this.selectedPiece.cellId,
+      toCellId: move.cellId,
+      moveType: move.type,
+      jumpChain: this.jumpChain
+    }));
   }
 
   selectPiece(piece) {
@@ -157,7 +246,91 @@ class Game {
       this.audio.play('move');
     }
 
+    if (this.isHost && this.network) {
+      this.broadcastMove({
+        pieceId: piece.id,
+        fromCellId: fromCellId,
+        toCellId: move.cellId,
+        moveType: move.type,
+        jumpChain: this.jumpChain
+      });
+    }
+
     this.endTurn();
+  }
+
+  applyRemoteMove(movePayload) {
+    if (movePayload.type === 'end_jump') {
+      this.endJumpTurn();
+      return;
+    }
+
+    const piece = this.pieces.find((p) => p.id === movePayload.pieceId);
+    if (!piece) return;
+
+    const move = {
+      type: movePayload.moveType,
+      cellId: movePayload.toCellId,
+      via: movePayload.via,
+      path: [movePayload.fromCellId, movePayload.toCellId]
+    };
+
+    this.board.movePiece(piece, move.cellId);
+
+    if (move.type === 'jump') {
+      this.jumpChain = movePayload.jumpChain || [];
+      this.audio.play('jump');
+    } else {
+      this.audio.play('move');
+    }
+
+    this.render();
+  }
+
+  applyRemoteState(state) {
+    this.board.resetPieces();
+
+    state.pieces.forEach((pieceData) => {
+      const piece = this.pieces.find((p) => p.id === pieceData.id);
+      if (piece) {
+        piece.cellId = pieceData.cellId;
+        this.board.placePiece(piece);
+      }
+    });
+
+    this.currentPlayerIndex = state.currentPlayerIndex;
+    this.gameOver = state.gameOver;
+    this.rankings = state.rankings || [];
+    this.selectedPiece = null;
+    this.validMoves = [];
+    this.jumpChain = [];
+
+    this.render();
+    this.updateStatusBar();
+  }
+
+  broadcastMove(move) {
+    if (!this.network) return;
+    this.network.broadcastToRoom(createMessage(NETWORK_MESSAGES.GAME_MOVE, move));
+  }
+
+  broadcastState() {
+    if (!this.network) return;
+
+    const now = Date.now();
+    if (now - this.lastStateSync < CONFIG.NETWORK.STATE_SYNC_THROTTLE) {
+      return;
+    }
+    this.lastStateSync = now;
+
+    const state = {
+      pieces: this.pieces.map((p) => ({ id: p.id, cellId: p.cellId })),
+      currentPlayerIndex: this.currentPlayerIndex,
+      gameOver: this.gameOver,
+      rankings: this.rankings
+    };
+
+    this.network.broadcastToRoom(createMessage(NETWORK_MESSAGES.GAME_STATE, state));
   }
 
   endJumpTurn() {
@@ -189,12 +362,20 @@ class Game {
       this.gameOver = true;
       this.render();
       this.showGameOver();
+
+      if (this.isHost && this.network) {
+        this.broadcastState();
+      }
       return;
     }
 
     this.advancePlayer();
     this.render();
     this.updateStatusBar();
+
+    if (this.isHost && this.network) {
+      this.broadcastState();
+    }
 
     if (this.currentPlayer.isAI) {
       window.setTimeout(() => this.doAITurn(), CONFIG.AI_THINK_DELAY);
@@ -225,6 +406,22 @@ class Game {
     window.setTimeout(() => {
       this.applyMove(result.piece, result.move);
     }, 250);
+  }
+
+  handleDisconnect() {
+    if (!this.gameOver) {
+      this.gameOver = true;
+      this.render();
+      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.68)';
+      this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      this.ctx.fillStyle = '#ffffff';
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.font = 'bold 28px sans-serif';
+      this.ctx.fillText('连接断开', this.canvas.width / 2, this.canvas.height / 2);
+      this.ctx.font = '18px sans-serif';
+      this.ctx.fillText('请返回主页重新开始', this.canvas.width / 2, this.canvas.height / 2 + 40);
+    }
   }
 
   showGameOver() {
@@ -296,8 +493,9 @@ class Game {
         return `<span style="color:${color}">角${seat}</span>`;
       }).join('/');
       const finished = player.isFinished || this.rankings.includes(player.id);
+      const remoteTag = player.isRemote ? ' <small style="color:#888">(远程)</small>' : '';
       return `<div class="player-badge ${active ? 'active' : ''} ${finished ? 'finished' : ''}" style="--player-color:${player.color}">
-        <span class="dot"></span>${player.name}<small>${seatText} ${player.finishedCount}/${player.pieces.length}</small>
+        <span class="dot"></span>${player.name}${remoteTag}<small>${seatText} ${player.finishedCount}/${player.pieces.length}</small>
       </div>`;
     }).join('');
 
@@ -308,8 +506,9 @@ class Game {
       return;
     }
 
+    const networkStatus = this.network ? `<span style="color:${this.network.isConnected ? '#4ecdc4' : '#e94560'}">●</span> ` : '';
     const prompt = message || (this.currentPlayer.isAI ? 'AI 思考中...' : '选择棋子');
-    turnMessage.textContent = `${this.currentPlayer.name}: ${prompt}`;
+    turnMessage.innerHTML = `${networkStatus}${this.currentPlayer.name}: ${prompt}`;
     btnEndJump.hidden = this.currentPlayer.isAI || this.jumpChain.length === 0;
   }
 
