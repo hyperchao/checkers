@@ -15,13 +15,13 @@
 
 | ID | 任务 | 状态 | 备注 |
 |----|------|------|------|
-| N2-1 | 创建 `web/js/messages.js`（消息类型定义） | ⬜ 待开始 | join/move/state/leave |
-| N2-2 | 创建 `web/js/network.js`（NetworkManager 类） | ⬜ 待开始 | |
-| N2-3 | 实现信令 WebSocket 连接 | ⬜ 待开始 | 连接 Go 服务器 |
-| N2-4 | 实现 Host 端：创建房间、RTCPeerConnection、DataChannel | ⬜ 待开始 | |
-| N2-5 | 实现 Client 端：加入房间、接收 DataChannel | ⬜ 待开始 | |
-| N2-6 | 实现 ICE Candidate 交换 | ⬜ 待开始 | |
-| N2-7 | 实现连接状态管理（连接中/已连接/断开） | ⬜ 待开始 | |
+| N2-1 | 创建 `web/js/messages.js`（消息类型定义） | ✅ 已完成 | join/move/state/leave |
+| N2-2 | 创建 `web/js/network.js`（NetworkManager 类） | ✅ 已完成 | |
+| N2-3 | 实现信令 WebSocket 连接 | ✅ 已完成 | 连接 Go 服务器 |
+| N2-4 | 实现 Host 端：创建房间、RTCPeerConnection、DataChannel | ✅ 已完成 | |
+| N2-5 | 实现 Client 端：加入房间、接收 DataChannel | ✅ 已完成 | |
+| N2-6 | 实现 ICE Candidate 交换 | ✅ 已完成 | |
+| N2-7 | 实现连接状态管理（连接中/已连接/断开） | ✅ 已完成 | |
 
 ## 阶段 3：游戏逻辑改造
 
@@ -60,11 +60,11 @@
 | 阶段 | 进度 |
 |------|------|
 | 阶段 1：Go 信令服务器 | 6/6 |
-| 阶段 2：WebRTC 网络层 | 0/7 |
+| 阶段 2：WebRTC 网络层 | 7/7 |
 | 阶段 3：游戏逻辑改造 | 0/7 |
 | 阶段 4：测试与优化 | 0/5 |
 | 阶段 5：部署 | 0/3 |
-| **总计** | **6/28** |
+| **总计** | **13/28** |
 
 ---
 
