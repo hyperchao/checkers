@@ -578,6 +578,7 @@
     }
 
     function resetOnlineUI() {
+      webrtcOfferSent.clear();
       document.getElementById('roomCreation').classList.remove('hidden');
       document.getElementById('joinRoomSection').classList.remove('hidden');
       document.getElementById('roomDisplay').classList.add('hidden');

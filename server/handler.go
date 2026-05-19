@@ -228,16 +228,6 @@ func (h *Hub) handleJoinRoom(client *Client, payload json.RawMessage) {
 		Payload: mustMarshal(room.ToJSON()),
 	})
 
-	// Send room info to host directly
-	hostClient, ok := h.GetClient(room.HostID)
-	if ok && hostClient.ID != client.ID {
-		hostClient.SendMessage(Message{
-			Type:    MsgRoomInfo,
-			Payload: mustMarshal(room.ToJSON()),
-		})
-	}
-
-	// Also broadcast to any other clients that might be in the room
 	h.broadcastToRoom(room.Code, Message{
 		Type:    MsgRoomInfo,
 		Payload: mustMarshal(room.ToJSON()),

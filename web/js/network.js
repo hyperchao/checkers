@@ -66,6 +66,11 @@ class NetworkManager {
       this.sendSignaling(NETWORK_MESSAGES.LEAVE_ROOM, {});
     }
     this.closeDataChannels();
+    this.pendingCandidates.clear();
+    if (this.peerConnection) {
+      this.peerConnection.close();
+      this.peerConnection = null;
+    }
     if (this.ws) {
       const ws = this.ws;
       this.ws = null;
@@ -155,6 +160,13 @@ class NetworkManager {
   }
 
   async createPeerConnection() {
+    // Close existing peer connection if any
+    if (this.peerConnection) {
+      this.peerConnection.close();
+      this.peerConnection = null;
+    }
+    this.pendingCandidates.clear();
+
     const config = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
