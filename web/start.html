@@ -616,13 +616,6 @@
         window.game.endJumpTurn();
       }
     });
-
-    document.getElementById('btnBGM').addEventListener('click', () => {
-      if (window.game && window.game.audio) {
-        const enabled = window.game.audio.toggleBGM();
-        document.getElementById('btnBGM').textContent = enabled ? '音乐' : '静音';
-      }
-    });
   </script>
 </body>
 </html>

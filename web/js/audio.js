@@ -72,7 +72,7 @@ class AudioManager {
     const map = {
       select: 440,
       move: 330,
-      jump: 560,
+      jump: 330,
       finish: 720
     };
     return map[name] || 300;

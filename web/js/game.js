@@ -129,6 +129,14 @@ class Game {
       this.endJumpTurn();
     });
 
+    const btnBGM = document.getElementById('btnBGM');
+    if (btnBGM) {
+      btnBGM.addEventListener('click', () => {
+        const enabled = this.audio.toggleBGM();
+        btnBGM.textContent = enabled ? '音乐' : '静音';
+      });
+    }
+
     this.canvas.addEventListener('click', (event) => this.handleClick(event));
     this.canvas.addEventListener('mousemove', (event) => this.handleMouseMove(event));
     this.canvas.addEventListener('mouseleave', () => {
@@ -317,6 +325,7 @@ class Game {
     const piece = this.pieces.find((p) => p.id === movePayload.pieceId);
     if (!piece) return;
 
+    const fromCellId = piece.cellId;
     const move = {
       type: movePayload.moveType,
       cellId: movePayload.toCellId,
@@ -328,7 +337,16 @@ class Game {
 
     if (move.type === 'jump') {
       this.jumpChain = movePayload.jumpChain || [];
+      this.jumpChain.push({ from: fromCellId, to: move.cellId, via: move.via });
+      this.selectedPiece = piece;
       this.audio.play('jump');
+      this.validMoves = this.board.getJumpMoves(piece.cellId, this.getJumpVisited());
+      if (this.validMoves.length > 0) {
+        this.render();
+        this.updateStatusBar('可继续跳跃，或结束回合');
+        this.broadcastState(true);
+        return;
+      }
     } else {
       this.audio.play('move');
     }
@@ -356,9 +374,20 @@ class Game {
     this.currentPlayerIndex = state.currentPlayerIndex;
     this.gameOver = state.gameOver;
     this.rankings = state.rankings || [];
-    this.selectedPiece = null;
-    this.validMoves = [];
-    this.jumpChain = [];
+    this.jumpChain = state.jumpChain || [];
+
+    if (this.jumpChain.length > 0 && state.selectedPieceId) {
+      this.selectedPiece = this.pieces.find((p) => p.id === state.selectedPieceId) || null;
+      if (this.selectedPiece) {
+        this.validMoves = this.board.getJumpMoves(this.selectedPiece.cellId, this.getJumpVisited());
+      } else {
+        this.selectedPiece = null;
+        this.validMoves = [];
+      }
+    } else {
+      this.selectedPiece = null;
+      this.validMoves = [];
+    }
 
     this.render();
     this.updateStatusBar();
@@ -383,7 +412,9 @@ class Game {
       pieces: this.pieces.map((p) => ({ id: p.id, cellId: p.cellId })),
       currentPlayerIndex: this.currentPlayerIndex,
       gameOver: this.gameOver,
-      rankings: this.rankings
+      rankings: this.rankings,
+      jumpChain: this.jumpChain,
+      selectedPieceId: this.selectedPiece ? this.selectedPiece.id : null
     };
 
     console.log('broadcastState: sending state with', state.pieces.length, 'pieces');
