@@ -168,6 +168,8 @@ class Game {
     this.render();
     this.updateStatusBar();
 
+    this.audio.loadBGM();
+
     if (this.isHost && this.network) {
       this.broadcastState();
     }

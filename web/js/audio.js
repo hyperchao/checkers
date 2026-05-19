@@ -1,8 +1,49 @@
 class AudioManager {
   constructor() {
     this.enabled = true;
+    this.bgmEnabled = true;
     this.volume = 0.18;
+    this.bgmVolume = 0.3;
     this.AudioContext = window.AudioContext || window.webkitAudioContext;
+    this.bgmAudio = null;
+    this.bgmLoaded = false;
+  }
+
+  loadBGM(src = 'assets/bgm.mp3') {
+    if (!this.AudioContext) return;
+    this.bgmAudio = new Audio(src);
+    this.bgmAudio.loop = true;
+    this.bgmAudio.volume = this.bgmVolume;
+    this.bgmAudio.addEventListener('canplaythrough', () => {
+      this.bgmLoaded = true;
+      if (this.bgmEnabled && this.enabled) {
+        this.bgmAudio.play().catch(() => {});
+      }
+    });
+    this.bgmAudio.addEventListener('error', () => {
+      this.bgmLoaded = false;
+    });
+  }
+
+  startBGM() {
+    if (!this.bgmAudio || !this.bgmLoaded) return;
+    this.bgmEnabled = true;
+    this.bgmAudio.play().catch(() => {});
+  }
+
+  stopBGM() {
+    if (!this.bgmAudio) return;
+    this.bgmEnabled = false;
+    this.bgmAudio.pause();
+  }
+
+  toggleBGM() {
+    if (this.bgmEnabled) {
+      this.stopBGM();
+    } else {
+      this.startBGM();
+    }
+    return this.bgmEnabled;
   }
 
   play(name) {

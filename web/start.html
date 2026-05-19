@@ -300,6 +300,7 @@
       <header class="game-header">
         <h1>欢乐跳棋</h1>
         <div class="header-actions">
+          <button id="btnBGM" type="button">音乐</button>
           <button id="btnIds" type="button">格号</button>
           <button id="btnRestart" type="button">重新开始</button>
           <button id="btnBack" type="button">返回主页</button>
@@ -613,6 +614,13 @@
     document.getElementById('btnEndJump').addEventListener('click', () => {
       if (window.game) {
         window.game.endJumpTurn();
+      }
+    });
+
+    document.getElementById('btnBGM').addEventListener('click', () => {
+      if (window.game && window.game.audio) {
+        const enabled = window.game.audio.toggleBGM();
+        document.getElementById('btnBGM').textContent = enabled ? '音乐' : '静音';
       }
     });
   </script>
