@@ -157,6 +157,7 @@ func (h *Hub) handleCreateRoom(client *Client, payload json.RawMessage) {
 		})
 		return
 	}
+	log.Printf("handleCreateRoom: parsed request, playerCount=%d", req.PlayerCount)
 
 	// Ensure client is registered in Hub (may not be if h.Register is blocked)
 	h.mu.Lock()
@@ -166,11 +167,13 @@ func (h *Hub) handleCreateRoom(client *Client, payload json.RawMessage) {
 	}
 	h.mu.Unlock()
 
+	log.Printf("handleCreateRoom: creating room...")
 	room := h.Rooms.CreateRoom(client.ID, RoomConfig{
 		PlayerCount:    req.PlayerCount,
 		SeatsPerPlayer: req.SeatsPerPlayer,
 		MaxPlayers:     req.MaxPlayers,
 	})
+	log.Printf("handleCreateRoom: room created, code=%s", room.Code)
 
 	client.SetRoom(room.Code)
 

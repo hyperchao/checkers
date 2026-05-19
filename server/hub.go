@@ -108,15 +108,20 @@ func (h *Hub) Run() {
 			h.mu.Unlock()
 			log.Printf("client connected: %s (total: %d)", client.ID, len(h.Clients))
 
-		case client := <-h.Unregister:
-			h.mu.Lock()
-			if _, ok := h.Clients[client.ID]; ok {
-				delete(h.Clients, client.ID)
-				close(client.Send)
-				h.handleClientDisconnect(client)
-			}
-			h.mu.Unlock()
-			log.Printf("client disconnected: %s (total: %d)", client.ID, len(h.Clients))
+	case client := <-h.Unregister:
+		h.mu.Lock()
+		shouldHandleDisconnect := false
+		if _, ok := h.Clients[client.ID]; ok {
+			delete(h.Clients, client.ID)
+			close(client.Send)
+			shouldHandleDisconnect = true
+		}
+		h.mu.Unlock()
+
+		if shouldHandleDisconnect {
+			h.handleClientDisconnect(client)
+		}
+		log.Printf("client disconnected: %s (total: %d)", client.ID, len(h.Clients))
 		}
 	}
 }
