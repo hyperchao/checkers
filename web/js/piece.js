@@ -11,7 +11,7 @@ class Piece {
   }
 }
 
-function renderPiece(ctx, piece, board, player, isSelected = false) {
+function renderPiece(ctx, piece, board, player, isSelected = false, debugMode = false) {
   const cell = board.getCellById(piece.cellId);
   if (!cell) return;
 
@@ -33,11 +33,13 @@ function renderPiece(ctx, piece, board, player, isSelected = false) {
   ctx.lineWidth = isSelected ? 4 : 2;
   ctx.stroke();
 
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 10px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(String(player.id + 1), point.x, point.y);
+  if (debugMode) {
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(piece.id), point.x, point.y);
+  }
 
   if (cell.corner === piece.targetCorner) {
     ctx.beginPath();

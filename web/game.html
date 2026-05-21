@@ -13,8 +13,7 @@
       <h1>欢乐跳棋</h1>
       <div class="header-actions">
         <button id="btnBGM" type="button">音乐</button>
-        <button id="btnTheme" type="button">主题</button>
-        <button id="btnIds" type="button">格号</button>
+        <button id="btnIds" type="button" hidden>格号</button>
         <button id="btnRestart" type="button">重新开始</button>
         <button id="btnBack" type="button">返回主页</button>
       </div>
@@ -33,7 +32,7 @@
     </section>
   </main>
 
-  <div id="tooltip" class="tooltip"></div>
+  <div id="tooltip" class="tooltip" hidden></div>
 
   <script src="js/config.js"></script>
   <script src="board_data.js"></script>
@@ -50,11 +49,9 @@
       const savedTheme = localStorage.getItem('theme') || 'light';
       document.documentElement.setAttribute('data-theme', savedTheme);
       const btn = document.getElementById('themeToggle');
-      const btnHeader = document.getElementById('btnTheme');
       const updateIcon = () => {
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         if (btn) btn.textContent = isDark ? '☀️' : '🌙';
-        if (btnHeader) btnHeader.textContent = isDark ? '浅色' : '深色';
       };
       updateIcon();
       const toggleTheme = () => {
@@ -69,7 +66,6 @@
         }
       };
       if (btn) btn.addEventListener('click', toggleTheme);
-      if (btnHeader) btnHeader.addEventListener('click', toggleTheme);
     })();
   </script>
 </body>

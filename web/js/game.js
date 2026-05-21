@@ -13,7 +13,8 @@ class Game {
     this.jumpChain = [];
     this.rankings = [];
     this.gameOver = false;
-    this.showIds = false;
+    this.debugMode = new URLSearchParams(window.location.search).get('mode') === 'debug';
+    this.showIds = this.debugMode;
     this.config = options.mode ? { ...this.readConfig(), ...options } : this.readConfig();
     this.network = options.networkManager || null;
     this.isHost = options.isHost || false;
@@ -120,10 +121,14 @@ class Game {
       this.startGame();
     });
 
-    document.getElementById('btnIds').addEventListener('click', () => {
-      this.showIds = !this.showIds;
-      this.render();
-    });
+    const btnIds = document.getElementById('btnIds');
+    if (this.debugMode && btnIds) {
+      btnIds.hidden = false;
+      btnIds.addEventListener('click', () => {
+        this.showIds = !this.showIds;
+        this.render();
+      });
+    }
 
     document.getElementById('btnEndJump').addEventListener('click', () => {
       this.endJumpTurn();
@@ -138,10 +143,12 @@ class Game {
     }
 
     this.canvas.addEventListener('click', (event) => this.handleClick(event));
-    this.canvas.addEventListener('mousemove', (event) => this.handleMouseMove(event));
-    this.canvas.addEventListener('mouseleave', () => {
-      document.getElementById('tooltip').style.display = 'none';
-    });
+    if (this.debugMode) {
+      this.canvas.addEventListener('mousemove', (event) => this.handleMouseMove(event));
+      this.canvas.addEventListener('mouseleave', () => {
+        document.getElementById('tooltip').hidden = true;
+      });
+    }
   }
 
   startGame() {
@@ -536,7 +543,7 @@ class Game {
 
     this.players.forEach((player) => {
       player.pieces.forEach((piece) => {
-        renderPiece(this.ctx, piece, this.board, player, piece === this.selectedPiece);
+        renderPiece(this.ctx, piece, this.board, player, piece === this.selectedPiece, this.debugMode);
       });
     });
 
@@ -582,7 +589,12 @@ class Game {
       const active = player.id === this.currentPlayer.id && !this.gameOver;
       const seatText = player.seats.map((seat) => {
         const color = player.seats.length > 1 ? BOARD_DATA.corners[seat].color : player.color;
-        return `<span style="color:${color}">角${seat}</span>`;
+        if (this.debugMode) {
+          const corner = BOARD_DATA.corners[seat];
+          const target = getTargetCorner(seat);
+          return `<span style="color:${color}">角${seat}(${corner.name}→角${target})</span>`;
+        }
+        return `<span style="color:${color}">●</span>`;
       }).join('/');
       const finished = player.isFinished || this.rankings.includes(player.id);
       const remoteTag = player.isRemote ? ' <small style="color:#888">(远程)</small>' : '';
@@ -610,11 +622,11 @@ class Game {
     const tooltip = document.getElementById('tooltip');
 
     if (!cell) {
-      tooltip.style.display = 'none';
+      tooltip.hidden = true;
       return;
     }
 
-    tooltip.style.display = 'block';
+    tooltip.hidden = false;
     tooltip.style.left = `${event.clientX + 14}px`;
     tooltip.style.top = `${event.clientY + 14}px`;
     const corner = cell.corner === null ? '中央' : `${BOARD_DATA.corners[cell.corner].name} -> 角${getTargetCorner(cell.corner)}`;
