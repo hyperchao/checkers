@@ -189,12 +189,12 @@ class Board {
     this.cells.forEach((cell) => {
       const point = this.hexToPixel(cell.q, cell.r);
       const corner = cell.corner === null ? null : BOARD_DATA.corners[cell.corner];
-      const fill = corner ? `${corner.color}33` : '#24364d';
-      const stroke = corner ? `${corner.color}` : '#41546f';
+      const fill = corner ? `${corner.color}22` : '#e2e8f0';
+      const stroke = corner ? `${corner.color}` : '#cbd5e0';
       this.drawHex(ctx, point.x, point.y, this.hexSize * 0.78, fill, stroke, 1);
 
       if (options.showIds) {
-        ctx.fillStyle = '#8fa1b7';
+        ctx.fillStyle = '#718096';
         ctx.font = '8px monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';

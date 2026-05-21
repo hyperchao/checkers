@@ -4,11 +4,11 @@ const CONFIG = {
   AI_THINK_DELAY: 450,
   COLORS: {
     PLAYERS: ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'],
-    BOARD_BG: '#172033',
-    CENTER_CELL: '#34495e',
+    BOARD_BG: '#f0f4f8',
+    CENTER_CELL: '#e2e8f0',
     MOVE: '#37d67a',
     JUMP: '#ffd166',
-    SELECTED: '#ffffff'
+    SELECTED: '#667eea'
   },
   END_CONDITION: {
     FIRST_FINISHED: 'FIRST_FINISHED',
