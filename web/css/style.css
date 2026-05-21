@@ -1,18 +1,95 @@
 :root {
   --bg-page: #f0f4f8;
+  --bg-page-gradient-start: #fef9f0;
+  --bg-page-gradient-mid: #f0f4f8;
+  --bg-page-gradient-end: #f0f8f4;
   --bg-panel: #ffffff;
   --bg-panel-2: #e8f0fe;
+  --bg-input: #f7fafc;
   --text-main: #2d3748;
   --text-muted: #718096;
+  --text-heading: #667eea;
   --accent: #48bb78;
   --accent-hover: #38a169;
   --danger: #fc8181;
   --danger-hover: #f56565;
+  --border-color: rgba(0, 0, 0, 0.06);
+  --border-focus: #667eea;
   --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.06);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
   --radius: 12px;
   --radius-sm: 8px;
+  --btn-primary-start: #667eea;
+  --btn-primary-end: #764ba2;
+  --btn-secondary-start: #48bb78;
+  --btn-secondary-end: #38a169;
+  --tab-bg: #e8f0fe;
+  --tab-active-bg: #ffffff;
+  --tab-text: #718096;
+  --tab-active-text: #2d3748;
+  --room-bg: #f7fafc;
+  --room-code-color: #667eea;
+  --waiting-color: #ed8936;
+  --rules-bg: rgba(247, 250, 252, 0.8);
+  --rules-title: #2d3748;
+  --rules-text: #718096;
+  --error-color: #e53e3e;
+  --board-bg: #f0f4f8;
+  --cell-center: #e2e8f0;
+  --cell-stroke: #cbd5e0;
+  --cell-text: #718096;
+  --tooltip-bg: rgba(255, 255, 255, 0.95);
+  --badge-bg: rgba(255, 255, 255, 0.8);
+  --badge-dot-shadow: rgba(255, 255, 255, 0.8);
+  --title-gradient-start: #667eea;
+  --title-gradient-end: #764ba2;
+}
+
+[data-theme="dark"] {
+  --bg-page: #141927;
+  --bg-page-gradient-start: #1a1a2e;
+  --bg-page-gradient-mid: #16213e;
+  --bg-page-gradient-end: #1a1a2e;
+  --bg-panel: #1d2840;
+  --bg-panel-2: #23324e;
+  --bg-input: #0f3460;
+  --text-main: #f4f7fb;
+  --text-muted: #a9b8cd;
+  --text-heading: #4ecdc4;
+  --accent: #4ecdc4;
+  --accent-hover: #3dbdb5;
+  --danger: #e94560;
+  --danger-hover: #d63850;
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-focus: #e94560;
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --tab-bg: #0f3460;
+  --tab-active-bg: #16213e;
+  --tab-text: #888;
+  --tab-active-text: #fff;
+  --room-bg: #0f3460;
+  --room-code-color: #4ecdc4;
+  --waiting-color: #f39c12;
+  --rules-bg: rgba(15, 52, 96, 0.2);
+  --rules-title: #fff;
+  --rules-text: #888;
+  --error-color: #e94560;
+  --board-bg: #172033;
+  --cell-center: #24364d;
+  --cell-stroke: #41546f;
+  --cell-text: #8fa1b7;
+  --tooltip-bg: rgba(8, 13, 23, 0.94);
+  --badge-bg: rgba(255, 255, 255, 0.08);
+  --badge-dot-shadow: rgba(255, 255, 255, 0.18);
+  --title-gradient-start: #4ecdc4;
+  --title-gradient-end: #44a08d;
+  --btn-primary-start: #e94560;
+  --btn-primary-end: #d63850;
+  --btn-secondary-start: #3498db;
+  --btn-secondary-end: #2980b9;
 }
 
 * {
@@ -24,8 +101,9 @@
 body {
   min-height: 100vh;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
+  background: linear-gradient(135deg, var(--bg-page-gradient-start) 0%, var(--bg-page-gradient-mid) 50%, var(--bg-page-gradient-end) 100%);
   color: var(--text-main);
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
 button,
@@ -54,7 +132,7 @@ button:active {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: linear-gradient(135deg, #fef9f0 0%, #f0f4f8 50%, #f0f8f4 100%);
+  background: linear-gradient(135deg, var(--bg-page-gradient-start) 0%, var(--bg-page-gradient-mid) 50%, var(--bg-page-gradient-end) 100%);
   min-height: 100vh;
 }
 
@@ -69,10 +147,11 @@ button:active {
   justify-content: space-between;
   gap: 14px;
   background: var(--bg-panel);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius);
   padding: 16px 20px;
   box-shadow: var(--shadow-sm);
+  transition: background 0.3s ease, border-color 0.3s ease;
 }
 
 .game-header {
@@ -82,7 +161,7 @@ button:active {
 .game-header h1 {
   font-size: 24px;
   line-height: 1.2;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--title-gradient-start) 0%, var(--title-gradient-end) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -99,11 +178,12 @@ button:active {
   color: var(--text-main);
   background: var(--bg-panel-2);
   font-weight: 500;
-  border: 1px solid rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--border-color);
+  transition: all 0.2s ease, background 0.3s ease;
 }
 
 .header-actions button:hover {
-  background: #dce6f5;
+  background: var(--bg-input);
 }
 
 #btnRestart {
@@ -116,11 +196,20 @@ button:active {
 }
 
 #btnBGM {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--btn-primary-start) 0%, var(--btn-primary-end) 100%);
   color: white;
 }
 
 #btnBGM:hover {
+  opacity: 0.9;
+}
+
+#btnTheme {
+  background: linear-gradient(135deg, var(--btn-secondary-start) 0%, var(--btn-secondary-end) 100%);
+  color: white;
+}
+
+#btnTheme:hover {
   opacity: 0.9;
 }
 
@@ -143,10 +232,11 @@ button:active {
   padding: 8px 12px;
   border-radius: var(--radius-sm);
   color: var(--text-main);
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: var(--badge-bg);
+  border: 1px solid var(--border-color);
   font-size: 13px;
   box-shadow: var(--shadow-sm);
+  transition: all 0.3s ease;
 }
 
 .player-badge .dot {
@@ -154,7 +244,7 @@ button:active {
   height: 10px;
   border-radius: 50%;
   background: var(--player-color);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 0 2px var(--badge-dot-shadow);
 }
 
 .player-badge small {
@@ -163,7 +253,7 @@ button:active {
 
 .player-badge.active {
   border-color: var(--player-color);
-  background: color-mix(in srgb, var(--player-color) 15%, white);
+  background: color-mix(in srgb, var(--player-color) 15%, var(--bg-panel));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--player-color) 30%, transparent);
 }
 
@@ -204,10 +294,11 @@ button:active {
   justify-content: center;
   overflow: auto;
   background: var(--bg-panel);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius);
   padding: 12px;
   box-shadow: var(--shadow-md);
+  transition: background 0.3s ease, border-color 0.3s ease;
 }
 
 #board {
@@ -224,13 +315,14 @@ button:active {
   max-width: 220px;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--tooltip-bg);
   color: var(--text-main);
   font-size: 12px;
   line-height: 1.45;
   pointer-events: none;
   box-shadow: var(--shadow-md);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--border-color);
+  transition: all 0.3s ease;
 }
 
 @media (max-width: 720px) {

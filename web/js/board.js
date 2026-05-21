@@ -182,19 +182,22 @@ class Board {
   }
 
   render(ctx, options = {}) {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const colors = isDark ? CONFIG.DARK_COLORS : CONFIG.COLORS;
+
     ctx.clearRect(0, 0, this.canvasSize, this.canvasSize);
-    ctx.fillStyle = CONFIG.COLORS.BOARD_BG;
+    ctx.fillStyle = colors.BOARD_BG;
     ctx.fillRect(0, 0, this.canvasSize, this.canvasSize);
 
     this.cells.forEach((cell) => {
       const point = this.hexToPixel(cell.q, cell.r);
       const corner = cell.corner === null ? null : BOARD_DATA.corners[cell.corner];
-      const fill = corner ? `${corner.color}22` : '#e2e8f0';
-      const stroke = corner ? `${corner.color}` : '#cbd5e0';
+      const fill = corner ? `${corner.color}${isDark ? '33' : '22'}` : colors.CENTER_CELL;
+      const stroke = corner ? `${corner.color}` : colors.CELL_STROKE;
       this.drawHex(ctx, point.x, point.y, this.hexSize * 0.78, fill, stroke, 1);
 
       if (options.showIds) {
-        ctx.fillStyle = '#718096';
+        ctx.fillStyle = colors.CELL_TEXT;
         ctx.font = '8px monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
