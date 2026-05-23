@@ -49,7 +49,7 @@ class Game {
       this.network.onGameMove = (move) => this.applyRemoteMove(move);
       this.network.onDisconnected = () => this.handleDisconnect();
       this.network.onPlayerNameUpdate = (payload) => {
-        const player = this.players.find((p) => p.isRemote);
+        const player = this.players.find((p) => p.id === payload.playerId);
         if (player) {
           player.name = payload.name;
           this.updateStatusBar();
@@ -171,6 +171,10 @@ class Game {
       const isRemote = this.config.mode === 'online' && !this.isHost && index !== 0;
       return new Player(index, seats, isAI, this.config.aiDifficulty, isRemote);
     });
+
+    if (this.config.mode === 'online' && this.myPlayerId !== null) {
+      this.players[this.myPlayerId].applySavedName();
+    }
 
     if (this.config.mode === 'online') {
       this.myPlayerId = this.isHost ? 0 : 1;
@@ -626,12 +630,15 @@ class Game {
   }
 
   renamePlayer() {
-    const newName = prompt('输入新名称：', this.currentPlayer.name);
+    if (this.myPlayerId === null) return;
+    const me = this.players[this.myPlayerId];
+    if (!me) return;
+    const newName = prompt('输入新名称：', me.name);
     if (!newName || newName.trim() === '') return;
-    this.currentPlayer.setName(newName.trim());
+    me.setName(newName.trim());
     this.updateStatusBar();
     if (this.network) {
-      this.network.broadcastPlayerName(newName.trim());
+      this.network.broadcastPlayerName({ name: newName.trim(), playerId: this.myPlayerId });
     }
   }
 

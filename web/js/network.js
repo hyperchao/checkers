@@ -360,8 +360,8 @@ class NetworkManager {
     });
   }
 
-  broadcastPlayerName(name) {
-    this.broadcastToRoom(createMessage(NETWORK_MESSAGES.PLAYER_NAME, { name }));
+  broadcastPlayerName(payload) {
+    this.broadcastToRoom(createMessage(NETWORK_MESSAGES.PLAYER_NAME, payload));
   }
 
   sendToHost(message) {
