@@ -7,7 +7,21 @@ class Player {
     this.isRemote = isRemote;
     this.color = CONFIG.COLORS.PLAYERS[id % CONFIG.COLORS.PLAYERS.length];
     this.pieces = [];
-    this.name = `${isAI ? 'AI' : '玩家'}${id + 1}`;
+    const savedName = Player.getSavedName();
+    this.name = savedName || `${isAI ? 'AI' : '玩家'}${id + 1}`;
+  }
+
+  static getSavedName() {
+    return localStorage.getItem('playerName') || null;
+  }
+
+  static setName(name) {
+    localStorage.setItem('playerName', name);
+  }
+
+  setName(name) {
+    this.name = name;
+    Player.setName(name);
   }
 
   addPiece(piece) {

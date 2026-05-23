@@ -48,6 +48,13 @@ class Game {
       this.network.onGameState = (state) => this.applyRemoteState(state);
       this.network.onGameMove = (move) => this.applyRemoteMove(move);
       this.network.onDisconnected = () => this.handleDisconnect();
+      this.network.onPlayerNameUpdate = (payload) => {
+        const player = this.players.find((p) => p.isRemote);
+        if (player) {
+          player.name = payload.name;
+          this.updateStatusBar();
+        }
+      };
       this.network.onGameStateRequest = () => {
         console.log('onGameStateRequest triggered, isHost=', this.isHost, 'players.length=', this.players.length);
         if (this.isHost && this.players.length > 0) {
@@ -587,6 +594,7 @@ class Game {
 
     playerInfo.innerHTML = this.players.map((player) => {
       const active = player.id === this.currentPlayer.id && !this.gameOver;
+      const isSelf = player.id === this.myPlayerId;
       const seatText = player.seats.map((seat) => {
         const color = player.seats.length > 1 ? BOARD_DATA.corners[seat].color : player.color;
         if (this.debugMode) {
@@ -597,9 +605,10 @@ class Game {
         return `<span style="color:${color}">●</span>`;
       }).join('/');
       const finished = player.isFinished || this.rankings.includes(player.id);
-      const remoteTag = '';
-      return `<div class="player-badge ${active ? 'active' : ''} ${finished ? 'finished' : ''}" style="--player-color:${player.color}">
-        <span class="dot"></span>${player.name}${remoteTag}<small>${seatText} ${player.finishedCount}/${player.pieces.length}</small>
+      const selfMark = isSelf ? '（我）' : '';
+      const clickHandler = isSelf ? ` onclick="game.renamePlayer()" style="cursor:pointer"` : '';
+      return `<div class="player-badge ${active ? 'active' : ''} ${finished ? 'finished' : ''} ${isSelf ? 'self' : ''}" style="--player-color:${player.color}"${clickHandler}>
+        <span class="dot"></span>${player.name}${selfMark}<small>${seatText} ${player.finishedCount}/${player.pieces.length}</small>
       </div>`;
     }).join('');
 
@@ -614,6 +623,16 @@ class Game {
     const prompt = message || (this.currentPlayer.isAI ? 'AI 思考中...' : '选择棋子');
     turnMessage.innerHTML = `${networkStatus}${this.currentPlayer.name}: ${prompt}`;
     btnEndJump.hidden = this.currentPlayer.isAI || this.jumpChain.length === 0;
+  }
+
+  renamePlayer() {
+    const newName = prompt('输入新名称：', this.currentPlayer.name);
+    if (!newName || newName.trim() === '') return;
+    this.currentPlayer.setName(newName.trim());
+    this.updateStatusBar();
+    if (this.network) {
+      this.network.broadcastPlayerName(newName.trim());
+    }
   }
 
   handleMouseMove(event) {

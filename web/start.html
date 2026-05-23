@@ -292,6 +292,10 @@
         </div>
 
         <div id="roomCreation">
+          <div class="setting">
+            <label>我的名称</label>
+            <input type="text" id="myNameInput" placeholder="选填，默认玩家1" maxlength="10" style="text-align: center;">
+          </div>
           <button class="btn-start" id="createRoomBtn">创建房间</button>
         </div>
 
@@ -299,8 +303,9 @@
           <div class="room-info">
             <div>房间号</div>
             <div class="room-code" id="roomCodeDisplay">------</div>
-            <div class="player-list" id="playerList">等待玩家加入...</div>
+            <button class="copy-link-btn" id="copyLinkBtn" title="复制邀请链接">📋复制</button>
           </div>
+          <div class="player-list" id="playerList">等待玩家加入...</div>
           <div class="waiting-text" id="waitingText">等待其他玩家加入...</div>
           <button class="btn-start" id="startOnlineBtn" disabled>开始游戏</button>
         </div>
@@ -399,6 +404,18 @@
     let roomInfo = null;
     let webrtcOfferSent = new Set();
 
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const roomCode = params.get('room');
+      if (roomCode) {
+        const input = document.getElementById('roomCodeInput');
+        if (input) {
+          input.value = roomCode.toUpperCase();
+          document.querySelector('[data-mode="online"]').click();
+        }
+      }
+    })();
+
     const modeTabs = document.querySelectorAll('.mode-tab');
     modeTabs.forEach((tab) => {
       tab.addEventListener('click', () => {
@@ -410,6 +427,12 @@
         document.getElementById('onlineSetup').classList.toggle('hidden', currentMode !== 'online');
       });
     });
+
+    (function() {
+      const savedName = localStorage.getItem('playerName');
+      const input = document.getElementById('myNameInput');
+      if (savedName && input) input.value = savedName;
+    })();
 
     document.getElementById('startLocalBtn').addEventListener('click', () => {
       const playerCount = document.getElementById('playerCount').value;
@@ -506,6 +529,10 @@
 
       try {
         console.log('connecting to server...');
+        const nameInput = document.getElementById('myNameInput');
+        const name = nameInput ? nameInput.value.trim() : '';
+        if (name) localStorage.setItem('playerName', name);
+        
         await networkManager.connect();
         console.log('connected, creating room...');
         await networkManager.createRoom({
@@ -562,6 +589,16 @@
       document.getElementById('roomCreation').classList.add('hidden');
       document.getElementById('joinRoomSection').classList.add('hidden');
       document.getElementById('roomDisplay').classList.remove('hidden');
+
+      const copyBtn = document.getElementById('copyLinkBtn');
+      copyBtn.style.display = 'inline-block';
+      copyBtn.onclick = () => {
+        const link = `${window.location.origin}/start.html?room=${info.code}`;
+        navigator.clipboard.writeText(link).then(() => {
+          copyBtn.textContent = '已复制!';
+          setTimeout(() => { copyBtn.textContent = '📋复制'; }, 2000);
+        });
+      };
 
       const isHost = info.hostId === networkManager.peerId;
       const startBtn = document.getElementById('startOnlineBtn');

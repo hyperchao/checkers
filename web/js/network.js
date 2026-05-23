@@ -306,6 +306,11 @@ class NetworkManager {
         case NETWORK_MESSAGES.ROOM_START:
           this.onRoomStart();
           break;
+        case NETWORK_MESSAGES.PLAYER_NAME:
+          if (this.onPlayerNameUpdate) {
+            this.onPlayerNameUpdate(msg.payload);
+          }
+          break;
       }
     };
   }
@@ -353,6 +358,10 @@ class NetworkManager {
         this.messageQueue.push(data);
       }
     });
+  }
+
+  broadcastPlayerName(name) {
+    this.broadcastToRoom(createMessage(NETWORK_MESSAGES.PLAYER_NAME, { name }));
   }
 
   sendToHost(message) {

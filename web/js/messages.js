@@ -12,7 +12,8 @@ const NETWORK_MESSAGES = {
   PONG: 'pong',
   GAME_MOVE: 'game_move',
   GAME_STATE: 'game_state',
-  GAME_CHAT: 'game_chat'
+  GAME_CHAT: 'game_chat',
+  PLAYER_NAME: 'player_name'
 };
 
 function createMessage(type, payload = {}) {

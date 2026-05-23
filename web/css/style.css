@@ -257,8 +257,31 @@ button:active {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--player-color) 30%, transparent);
 }
 
-.player-badge.finished {
-  opacity: 0.55;
+.player-badge.self {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.4);
+}
+
+.room-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+}
+
+.copy-link-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s;
+}
+
+.copy-link-btn:hover {
+  opacity: 0.85;
 }
 
 .turn-info {
