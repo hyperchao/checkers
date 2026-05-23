@@ -597,7 +597,7 @@ class Game {
         return `<span style="color:${color}">●</span>`;
       }).join('/');
       const finished = player.isFinished || this.rankings.includes(player.id);
-      const remoteTag = player.isRemote ? ' <small style="color:#888">(远程)</small>' : '';
+      const remoteTag = '';
       return `<div class="player-badge ${active ? 'active' : ''} ${finished ? 'finished' : ''}" style="--player-color:${player.color}">
         <span class="dot"></span>${player.name}${remoteTag}<small>${seatText} ${player.finishedCount}/${player.pieces.length}</small>
       </div>`;
