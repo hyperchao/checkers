@@ -673,31 +673,47 @@
     }
 
     function handleRoomStart() {
-      console.log('handleRoomStart called, roomInfo=', roomInfo);
-      document.querySelector('.start-screen').classList.add('hidden');
-      document.getElementById('gameArea').classList.remove('hidden');
+      try {
+        console.log('handleRoomStart called, roomInfo=', roomInfo);
+        const startScreen = document.querySelector('.start-screen');
+        const gameArea = document.getElementById('gameArea');
+        
+        if (startScreen) startScreen.classList.add('hidden');
+        if (gameArea) gameArea.classList.remove('hidden');
+        
+        if (!roomInfo) {
+          console.error('handleRoomStart: roomInfo is null');
+          return;
+        }
 
-      const isHost = roomInfo.hostId === networkManager.peerId;
-      const cfg = roomInfo.config || {};
+        const isHost = roomInfo.hostId === networkManager.peerId;
+        const cfg = roomInfo.config || {};
 
-      console.log('Creating Game with config:', { mode: 'online', network: true, playerCount: cfg.playerCount, seatsPerPlayer: cfg.seatsPerPlayer, isHost });
+        console.log('Creating Game with config:', { mode: 'online', network: true, playerCount: cfg.playerCount, seatsPerPlayer: cfg.seatsPerPlayer, isHost });
 
-      window.game = new Game({
-        mode: 'online',
-        network: true,
-        playerCount: cfg.playerCount || 2,
-        seatsPerPlayer: cfg.seatsPerPlayer || 1,
-        isHost: isHost,
-        roomCode: roomInfo.code,
-        networkManager: networkManager
-      });
+        window.game = new Game({
+          mode: 'online',
+          network: true,
+          playerCount: cfg.playerCount || 2,
+          seatsPerPlayer: cfg.seatsPerPlayer || 1,
+          isHost: isHost,
+          roomCode: roomInfo.code,
+          networkManager: networkManager
+        });
+      } catch (e) {
+        console.error('handleRoomStart error:', e);
+      }
     }
 
     document.getElementById('startOnlineBtn').addEventListener('click', () => {
-      if (networkManager && networkManager.mode === 'host') {
-        networkManager.broadcastToRoom(createMessage(NETWORK_MESSAGES.ROOM_START, {}));
-        handleRoomStart();
+      if (!networkManager || networkManager.mode !== 'host') return;
+      if (!roomInfo) {
+        console.error('startOnlineBtn clicked but roomInfo is null');
+        return;
       }
+      console.log('startOnlineBtn clicked, broadcasting ROOM_START');
+      networkManager.broadcastToRoom(createMessage(NETWORK_MESSAGES.ROOM_START, {}));
+      handleRoomStart();
     });
 
     function showOnlineError(msg) {
