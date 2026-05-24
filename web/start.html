@@ -641,15 +641,20 @@
       const isHost = info.hostId === networkManager.peerId;
       const startBtn = document.getElementById('startOnlineBtn');
 
-      if (!isHost) {
+      if (isHost) {
+        if (info.status === 'full') {
+          startBtn.disabled = false;
+          document.getElementById('waitingText').textContent = '连接已建立，可以开始游戏';
+        } else if (info.clientIds && info.clientIds.length === info.maxPlayers - 1) {
+          startBtn.disabled = false;
+          document.getElementById('waitingText').textContent = '连接已建立，可以开始游戏';
+        } else {
+          startBtn.disabled = true;
+          document.getElementById('waitingText').textContent = '等待其他玩家加入...';
+        }
+      } else {
         startBtn.hidden = true;
         document.getElementById('waitingText').textContent = '等待房主开始游戏...';
-      } else if (info.status === 'full') {
-        startBtn.disabled = true;
-        document.getElementById('waitingText').textContent = '房间已满，连接中...';
-      } else {
-        startBtn.disabled = true;
-        document.getElementById('waitingText').textContent = '等待其他玩家加入...';
       }
 
       if (isHost && info.clientIds) {
@@ -663,12 +668,18 @@
     }
 
     function handleDataChannelReady() {
-      console.log('handleDataChannelReady called, isHost=', roomInfo && roomInfo.hostId === networkManager.peerId);
-      const isHost = roomInfo && roomInfo.hostId === networkManager.peerId;
-      if (isHost && roomInfo && roomInfo.status === 'full') {
+      console.log('handleDataChannelReady called');
+      const isHost = roomInfo && networkManager && roomInfo.hostId === networkManager.peerId;
+      if (!isHost) return;
+      
+      const currentClients = roomInfo.clientIds ? roomInfo.clientIds.length : 0;
+      console.log('handleDataChannelReady: current clients:', currentClients, 'maxPlayers:', roomInfo.maxPlayers);
+      
+      if (currentClients >= roomInfo.maxPlayers - 1) {
         const startBtn = document.getElementById('startOnlineBtn');
         startBtn.disabled = false;
         document.getElementById('waitingText').textContent = '连接已建立，可以开始游戏';
+        console.log('Start button enabled!');
       }
     }
 
