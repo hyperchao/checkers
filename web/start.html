@@ -665,7 +665,7 @@
     function handleDataChannelReady() {
       console.log('handleDataChannelReady called, isHost=', roomInfo && roomInfo.hostId === networkManager.peerId);
       const isHost = roomInfo && roomInfo.hostId === networkManager.peerId;
-      if (isHost) {
+      if (isHost && roomInfo && roomInfo.status === 'full') {
         const startBtn = document.getElementById('startOnlineBtn');
         startBtn.disabled = false;
         document.getElementById('waitingText').textContent = '连接已建立，可以开始游戏';
