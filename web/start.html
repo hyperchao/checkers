@@ -303,7 +303,7 @@
           <div class="room-info">
             <div>房间号</div>
             <div class="room-code" id="roomCodeDisplay">------</div>
-            <button class="copy-link-btn" id="copyLinkBtn" title="复制邀请链接">📋复制</button>
+            <button class="copy-link-btn" id="copyLinkBtn" title="复制邀请链接">复制链接</button>
           </div>
           <div class="player-list" id="playerList">等待玩家加入...</div>
           <div class="waiting-text" id="waitingText">等待其他玩家加入...</div>
@@ -596,7 +596,11 @@
         const link = `${window.location.origin}/start.html?room=${info.code}`;
         navigator.clipboard.writeText(link).then(() => {
           copyBtn.textContent = '已复制!';
-          setTimeout(() => { copyBtn.textContent = '📋复制'; }, 2000);
+          setTimeout(() => { copyBtn.textContent = '复制链接'; }, 2000);
+        }).catch((err) => {
+          console.error('复制失败:', err);
+          copyBtn.textContent = '复制失败';
+          setTimeout(() => { copyBtn.textContent = '复制链接'; }, 2000);
         });
       };
 
