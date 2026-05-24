@@ -595,16 +595,39 @@
       copyBtn.style.visibility = 'visible';
       copyBtn.onclick = () => {
         const link = `${window.location.origin}/start.html?room=${info.code}`;
-        const tempInput = document.createElement('input');
-        tempInput.style.cssText = 'position:fixed;top:0;left:0;opacity:0;width:1px;height:1px;';
-        tempInput.value = link;
-        document.body.appendChild(tempInput);
-        tempInput.select();
-        tempInput.setSelectionRange(0, 99999);
-        document.execCommand('copy');
-        document.body.removeChild(tempInput);
-        copyBtn.textContent = '已复制!';
-        setTimeout(() => { copyBtn.textContent = '复制链接'; }, 2000);
+        const userAgent = navigator.userAgent.toLowerCase();
+        const isAndroid = userAgent.includes('android');
+        const isIOS = /iphone|ipad|ipod/.test(userAgent);
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(link).then(() => {
+            copyBtn.textContent = '已复制!';
+            setTimeout(() => { copyBtn.textContent = '复制链接'; }, 2000);
+          }).catch(() => {
+            prompt('请长按复制链接：', link);
+          });
+        } else if (isAndroid || isIOS) {
+          prompt('请长按复制链接：', link);
+        } else {
+          const range = document.createRange();
+          const selection = window.getSelection();
+          const tempSpan = document.createElement('span');
+          tempSpan.textContent = link;
+          tempSpan.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none;';
+          document.body.appendChild(tempSpan);
+          range.selectNodeContents(tempSpan);
+          selection.removeAllRanges();
+          selection.addRange(range);
+          try {
+            document.execCommand('copy');
+            copyBtn.textContent = '已复制!';
+          } catch (e) {
+            prompt('请手动复制链接：', link);
+          }
+          selection.removeAllRanges();
+          document.body.removeChild(tempSpan);
+          setTimeout(() => { copyBtn.textContent = '复制链接'; }, 2000);
+        }
       };
 
       const isHost = info.hostId === networkManager.peerId;
