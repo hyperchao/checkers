@@ -6,23 +6,38 @@ class AudioManager {
     this.bgmVolume = 0.3;
     this.AudioContext = window.AudioContext || window.webkitAudioContext;
     this.bgmAudio = null;
+    this.bgmSrc = null;
     this.bgmLoaded = false;
+    this.bgmCanPlayHandler = null;
+    this.bgmErrorHandler = null;
+    this.sfxContext = null;
   }
 
   loadBGM(src = 'assets/bgm.mp3') {
     if (!this.AudioContext) return;
+    if (this.bgmAudio && this.bgmSrc === src) {
+      if (this.bgmEnabled && this.enabled && this.bgmLoaded) {
+        this.bgmAudio.play().catch(() => {});
+      }
+      return;
+    }
+
+    this.disposeBGM();
     this.bgmAudio = new Audio(src);
+    this.bgmSrc = src;
     this.bgmAudio.loop = true;
     this.bgmAudio.volume = this.bgmVolume;
-    this.bgmAudio.addEventListener('canplaythrough', () => {
+    this.bgmCanPlayHandler = () => {
       this.bgmLoaded = true;
       if (this.bgmEnabled && this.enabled) {
         this.bgmAudio.play().catch(() => {});
       }
-    });
-    this.bgmAudio.addEventListener('error', () => {
+    };
+    this.bgmErrorHandler = () => {
       this.bgmLoaded = false;
-    });
+    };
+    this.bgmAudio.addEventListener('canplaythrough', this.bgmCanPlayHandler);
+    this.bgmAudio.addEventListener('error', this.bgmErrorHandler);
   }
 
   startBGM() {
@@ -49,7 +64,8 @@ class AudioManager {
   play(name) {
     if (!this.enabled || !this.AudioContext) return;
 
-    const context = new this.AudioContext();
+    const context = this.getSfxContext();
+    if (!context) return;
     const gain = context.createGain();
     gain.connect(context.destination);
 
@@ -66,6 +82,20 @@ class AudioManager {
     gain.gain.exponentialRampToValueAtTime(0.01, context.currentTime + 0.12);
     oscillator.start(context.currentTime);
     oscillator.stop(context.currentTime + 0.12);
+    oscillator.onended = () => {
+      oscillator.disconnect();
+      gain.disconnect();
+    };
+  }
+
+  getSfxContext() {
+    if (!this.sfxContext || this.sfxContext.state === 'closed') {
+      this.sfxContext = new this.AudioContext();
+    }
+    if (this.sfxContext.state === 'suspended') {
+      this.sfxContext.resume().catch(() => {});
+    }
+    return this.sfxContext;
   }
 
   frequencyFor(name) {
@@ -89,6 +119,36 @@ class AudioManager {
       gain.gain.exponentialRampToValueAtTime(0.01, start + step);
       oscillator.start(start);
       oscillator.stop(start + step);
+      oscillator.onended = () => {
+        oscillator.disconnect();
+        if (index === notes.length - 1) gain.disconnect();
+      };
     });
+  }
+
+  disposeBGM() {
+    if (!this.bgmAudio) return;
+    if (this.bgmCanPlayHandler) {
+      this.bgmAudio.removeEventListener('canplaythrough', this.bgmCanPlayHandler);
+    }
+    if (this.bgmErrorHandler) {
+      this.bgmAudio.removeEventListener('error', this.bgmErrorHandler);
+    }
+    this.bgmAudio.pause();
+    this.bgmAudio.removeAttribute('src');
+    this.bgmAudio.load();
+    this.bgmAudio = null;
+    this.bgmSrc = null;
+    this.bgmLoaded = false;
+    this.bgmCanPlayHandler = null;
+    this.bgmErrorHandler = null;
+  }
+
+  dispose() {
+    this.disposeBGM();
+    if (this.sfxContext && this.sfxContext.state !== 'closed') {
+      this.sfxContext.close().catch(() => {});
+    }
+    this.sfxContext = null;
   }
 }

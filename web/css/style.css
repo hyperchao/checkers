@@ -222,14 +222,16 @@ button:active {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .player-badge {
   display: flex;
   align-items: center;
-  gap: 7px;
-  min-height: 36px;
-  padding: 8px 12px;
+  gap: 9px;
+  min-height: 42px;
+  padding: 8px 10px;
   border-radius: var(--radius-sm);
   color: var(--text-main);
   background: var(--badge-bg);
@@ -240,15 +242,30 @@ button:active {
 }
 
 .player-badge .dot {
-  width: 10px;
-  height: 10px;
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  background: var(--player-color);
+  background: var(--player-dot, var(--player-color));
   box-shadow: 0 0 0 2px var(--badge-dot-shadow);
+}
+
+.player-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.player-name {
+  color: var(--text-main);
+  font-weight: 650;
+  line-height: 1.15;
 }
 
 .player-badge small {
   color: var(--text-muted);
+  line-height: 1.15;
 }
 
 .player-badge.active {
@@ -257,9 +274,31 @@ button:active {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--player-color) 30%, transparent);
 }
 
+.player-badge.editable {
+  cursor: pointer;
+}
+
+.player-badge.editable:hover {
+  border-color: var(--player-color);
+  background: color-mix(in srgb, var(--player-color) 10%, var(--bg-panel));
+}
+
+.edit-mark {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--player-color) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--player-color) 22%, transparent);
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0.85;
+}
+
 .player-badge.self {
-  border-color: #f59e0b;
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.4);
+  border-color: color-mix(in srgb, var(--player-color) 55%, var(--border-color));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--player-color) 16%, transparent);
 }
 
 .room-info {
@@ -289,10 +328,19 @@ button:active {
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  min-width: 160px;
+  flex: 0 0 clamp(220px, 32vw, 360px);
+  min-width: 0;
   text-align: right;
   color: var(--text-muted);
   line-height: 1.5;
+}
+
+#turnMessage {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .turn-info button {
@@ -358,6 +406,16 @@ button:active {
   .status-bar {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .turn-info {
+    flex: 0 1 auto;
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  #turnMessage {
+    white-space: normal;
   }
 
   .header-actions {

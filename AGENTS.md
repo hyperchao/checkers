@@ -9,9 +9,8 @@ HTML5 Canvas single-page game. There is no build system and no `package.json`.
 - `web/start.html` - start screen
 - `web/game.html` - main game UI
 - `web/index.html` - redirects to the start screen
-- `web/test_board.html` - board data/rendering test
 
-Open the HTML files directly in a browser; no local server is required.
+Single-player/local games can be opened directly in a browser. Online games require the Go signaling server in `server/`.
 
 ## Architecture
 
@@ -69,8 +68,8 @@ When the start screen is set to 1 human, the game creates a second AI controller
 2x1: [[0], [3]]
 2x2: [[0,1], [3,4]]
 2x3: [[0,1,2], [3,4,5]]
-3x1: [[0], [1], [2]]
-3x2: [[0,3], [1,4], [2,5]]
+3x1: [[0], [2], [4]]
+3x2: [[0,1], [2,3], [4,5]]
 4x1: [[0], [1], [3], [4]]
 5x1: [[0], [1], [2], [3], [4]]
 6x1: [[0], [1], [2], [3], [4], [5]]
@@ -86,5 +85,5 @@ When the start screen is set to 1 human, the game creates a second AI controller
 ## Testing
 
 - `node --check web/js/*.js web/board_data.js` - syntax check all JS
-- Open `web/test_board.html` and confirm 121 total cells and 121 unique coordinates.
 - Open `web/start.html`, try valid player/corner-count combinations, and verify pieces render and turns advance.
+- Online mode: run `go test ./...` in `server/`, then start the Go server and verify 2-6 player rooms can connect before starting.

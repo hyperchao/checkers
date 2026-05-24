@@ -6,7 +6,6 @@
 - 构建：无构建系统，无 `package.json`
 - 启动：直接打开 `web/start.html`
 - 主游戏页：`web/game.html`
-- 棋盘测试页：`web/test_board.html`
 
 ## 2. 联机架构
 
@@ -28,7 +27,8 @@
        +---------> [Go Server] <------+
        |    (仅房间管理/信令)          |
        |                              |
-[Browser C - Client] <==WebRTC==> [Browser D - Client]
+[Browser A - Host] <==WebRTC==> [Browser C - Client]
+[Browser A - Host] <==WebRTC==> [Browser D - Client]
 ```
 
 ### 2.3 服务器职责
@@ -103,8 +103,8 @@ y = HEX_SIZE * 1.5 * r
 | 2人 | 1 | 玩家1: 0，玩家2: 3 |
 | 2人 | 2 | 玩家1: 0/1，玩家2: 3/4 |
 | 2人 | 3 | 玩家1: 0/1/2，玩家2: 3/4/5 |
-| 3人 | 1 | 玩家1: 0，玩家2: 1，玩家3: 2 |
-| 3人 | 2 | 玩家1: 0/3，玩家2: 1/4，玩家3: 2/5 |
+| 3人 | 1 | 玩家1: 0，玩家2: 2，玩家3: 4 |
+| 3人 | 2 | 玩家1: 0/1，玩家2: 2/3，玩家3: 4/5 |
 | 4人 | 1 | 玩家1: 0，玩家2: 1，玩家3: 3，玩家4: 4 |
 | 5人 | 1 | 玩家1-5 分别控制 0/1/2/3/4 |
 | 6人 | 1 | 每人控制一个同编号角区 |
@@ -148,7 +148,6 @@ y = HEX_SIZE * 1.5 * r
 | `web/js/player.js` | 玩家与多角区控制 |
 | `web/js/piece.js` | 棋子模型与渲染 |
 | `web/js/ai.js` | AI 选步 |
-| `web/test_board.html` | 棋盘数据可视化测试 |
 
 ## 10. 验证
 
@@ -158,8 +157,6 @@ y = HEX_SIZE * 1.5 * r
 
 - `web/start.html`
 - `web/game.html`
-- `web/test_board.html`
-
 基础检查：
 
 - `BOARD_DATA.cells.length === 121`

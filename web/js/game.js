@@ -16,11 +16,15 @@ class Game {
     this.debugMode = new URLSearchParams(window.location.search).get('mode') === 'debug';
     this.showIds = this.debugMode;
     this.config = options.mode ? { ...this.readConfig(), ...options } : this.readConfig();
+    this.embedded = Boolean(options.embedded);
     this.network = options.networkManager || null;
     this.isHost = options.isHost || false;
     this.myPlayerId = null;
     this.lastStateSync = 0;
     this.networkDisconnected = false;
+    this.disposed = false;
+    this.eventCleanups = [];
+    this.timeoutIds = new Set();
     this.setupEvents();
     this.initNetwork();
   }
@@ -53,6 +57,9 @@ class Game {
         if (player) {
           player.name = payload.name;
           this.updateStatusBar();
+          if (this.isHost && payload.fromPeerId && payload.fromPeerId !== this.network.peerId) {
+            this.network.broadcastPlayerName({ name: payload.name, playerId: payload.playerId });
+          }
         }
       };
       this.network.onGameStateRequest = () => {
@@ -99,11 +106,11 @@ class Game {
         this.startGame();
       } else {
         await new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => reject(new Error('DataChannel timeout')), 30000);
+          const timeout = this.setGameTimeout(() => reject(new Error('DataChannel timeout')), 30000);
 
           this.network.onStateChange = (state) => {
             if (state === 'connected' && this.network.dataChannels.size > 0) {
-              clearTimeout(timeout);
+              this.clearGameTimeout(timeout);
               this.network.sendToHost(createMessage(NETWORK_MESSAGES.GAME_STATE, { request: true }));
               resolve();
             }
@@ -117,48 +124,107 @@ class Game {
   }
 
   setupEvents() {
-    document.getElementById('btnBack').addEventListener('click', () => {
+    this.addEvent(document.getElementById('btnBack'), 'click', () => {
       if (this.network) {
         this.network.disconnect();
       }
+      this.dispose({ disconnectNetwork: false });
+      if (this.embedded) return;
       window.location.href = 'start.html';
     });
 
-    document.getElementById('btnRestart').addEventListener('click', () => {
+    this.addEvent(document.getElementById('btnRestart'), 'click', () => {
+      if (this.config.mode === 'online') return;
       this.startGame();
     });
 
     const btnIds = document.getElementById('btnIds');
     if (this.debugMode && btnIds) {
       btnIds.hidden = false;
-      btnIds.addEventListener('click', () => {
+      this.addEvent(btnIds, 'click', () => {
         this.showIds = !this.showIds;
         this.render();
       });
     }
 
-    document.getElementById('btnEndJump').addEventListener('click', () => {
+    this.addEvent(document.getElementById('btnEndJump'), 'click', () => {
+      if (this.config.mode === 'online' && !this.isHost) {
+        if (this.jumpChain.length > 0 && this.selectedPiece) {
+          this.network.sendToHost(createMessage(NETWORK_MESSAGES.GAME_MOVE, {
+            type: 'end_jump'
+          }));
+        }
+        return;
+      }
       this.endJumpTurn();
     });
 
     const btnBGM = document.getElementById('btnBGM');
     if (btnBGM) {
-      btnBGM.addEventListener('click', () => {
+      this.addEvent(btnBGM, 'click', () => {
         const enabled = this.audio.toggleBGM();
         btnBGM.textContent = enabled ? '音乐' : '静音';
       });
     }
 
-    this.canvas.addEventListener('click', (event) => this.handleClick(event));
+    this.addEvent(this.canvas, 'click', (event) => this.handleClick(event));
     if (this.debugMode) {
-      this.canvas.addEventListener('mousemove', (event) => this.handleMouseMove(event));
-      this.canvas.addEventListener('mouseleave', () => {
+      this.addEvent(this.canvas, 'mousemove', (event) => this.handleMouseMove(event));
+      this.addEvent(this.canvas, 'mouseleave', () => {
         document.getElementById('tooltip').hidden = true;
       });
     }
   }
 
+  addEvent(target, type, handler, options) {
+    if (!target) return;
+    target.addEventListener(type, handler, options);
+    this.eventCleanups.push(() => target.removeEventListener(type, handler, options));
+  }
+
+  setGameTimeout(handler, delay) {
+    const timeoutId = window.setTimeout(() => {
+      this.timeoutIds.delete(timeoutId);
+      if (!this.disposed) handler();
+    }, delay);
+    this.timeoutIds.add(timeoutId);
+    return timeoutId;
+  }
+
+  clearGameTimeout(timeoutId) {
+    window.clearTimeout(timeoutId);
+    this.timeoutIds.delete(timeoutId);
+  }
+
+  clearGameTimeouts() {
+    this.timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    this.timeoutIds.clear();
+  }
+
+  dispose(options = {}) {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.clearGameTimeouts();
+    this.eventCleanups.forEach((cleanup) => cleanup());
+    this.eventCleanups = [];
+    this.audio.dispose();
+
+    if (this.network) {
+      this.network.onGameState = () => {};
+      this.network.onGameMove = () => {};
+      this.network.onDisconnected = () => {};
+      this.network.onPlayerNameUpdate = () => {};
+      this.network.onGameStateRequest = () => {};
+      this.network.onStateChange = () => {};
+      if (options.disconnectNetwork) {
+        this.network.disconnect();
+      }
+    }
+  }
+
   startGame() {
+    if (this.disposed) return;
+    this.clearGameTimeouts();
     console.log('startGame called, config=', this.config);
     const requestedHumans = Number(this.config.playerCount) || 2;
     const seatsPerPlayer = Number(this.config.seatsPerPlayer) || 1;
@@ -173,8 +239,10 @@ class Game {
     });
 
     if (this.config.mode === 'online') {
-      this.myPlayerId = this.isHost ? 0 : 1;
-      this.players[this.myPlayerId].applySavedName((name) => {
+      const peerIds = Array.isArray(this.config.peerIds) ? this.config.peerIds : [];
+      const peerIndex = peerIds.indexOf(this.network ? this.network.peerId : null);
+      this.myPlayerId = peerIndex >= 0 ? peerIndex : (this.isHost ? 0 : 1);
+      if (this.players[this.myPlayerId]) this.players[this.myPlayerId].applySavedName((name) => {
         if (this.network) {
           this.network.broadcastPlayerName({ name, playerId: this.myPlayerId });
         }
@@ -202,7 +270,7 @@ class Game {
     }
 
     if (this.currentPlayer.isAI) {
-      window.setTimeout(() => this.doAITurn(), CONFIG.AI_THINK_DELAY);
+      this.setGameTimeout(() => this.doAITurn(), CONFIG.AI_THINK_DELAY);
     }
   }
 
@@ -287,6 +355,7 @@ class Game {
       fromCellId: this.selectedPiece.cellId,
       toCellId: move.cellId,
       moveType: move.type,
+      via: move.via,
       jumpChain: this.jumpChain
     }));
   }
@@ -310,9 +379,12 @@ class Game {
       this.validMoves = this.board.getJumpMoves(piece.cellId, this.getJumpVisited());
       if (this.validMoves.length > 0) {
         this.render();
-        this.updateStatusBar(this.currentPlayer.isAI ? '继续跳跃中...' : '可继续跳跃，或结束回合');
+        this.updateStatusBar(this.currentPlayer.isAI ? '继续跳跃中...' : '可继续跳跃；点击当前棋子结束回合');
+        if (this.isHost && this.network) {
+          this.broadcastState(true);
+        }
         if (this.currentPlayer.isAI) {
-          window.setTimeout(() => {
+          this.setGameTimeout(() => {
             this.applyMove(piece, this.validMoves[0]);
           }, 260);
         }
@@ -328,6 +400,7 @@ class Game {
         fromCellId: fromCellId,
         toCellId: move.cellId,
         moveType: move.type,
+        via: move.via,
         jumpChain: this.jumpChain
       });
     }
@@ -337,20 +410,17 @@ class Game {
 
   applyRemoteMove(movePayload) {
     if (movePayload.type === 'end_jump') {
-      this.endJumpTurn();
+      if (this.canRemoteEndJump(movePayload)) {
+        this.endJumpTurn();
+      }
       return;
     }
 
     const piece = this.pieces.find((p) => p.id === movePayload.pieceId);
     if (!piece) return;
-
+    const move = this.getValidatedRemoteMove(piece, movePayload);
+    if (!move) return;
     const fromCellId = piece.cellId;
-    const move = {
-      type: movePayload.moveType,
-      cellId: movePayload.toCellId,
-      via: movePayload.via,
-      path: [movePayload.fromCellId, movePayload.toCellId]
-    };
 
     this.board.movePiece(piece, move.cellId);
 
@@ -362,7 +432,7 @@ class Game {
       this.validMoves = this.board.getJumpMoves(piece.cellId, this.getJumpVisited());
       if (this.validMoves.length > 0) {
         this.render();
-        this.updateStatusBar('可继续跳跃，或结束回合');
+        this.updateStatusBar('可继续跳跃；点击当前棋子结束回合');
         this.broadcastState(true);
         return;
       }
@@ -376,6 +446,49 @@ class Game {
     this.updateStatusBar();
 
     this.endTurn();
+  }
+
+  canRemoteEndJump(movePayload) {
+    const peerIds = Array.isArray(this.config.peerIds) ? this.config.peerIds : [];
+    const expectedPeerId = peerIds[this.currentPlayer.id];
+    return this.config.mode === 'online' &&
+      this.isHost &&
+      !this.gameOver &&
+      this.jumpChain.length > 0 &&
+      this.selectedPiece &&
+      (!expectedPeerId || movePayload.fromPeerId === expectedPeerId) &&
+      this.currentPlayer.ownsPiece(this.selectedPiece);
+  }
+
+  getValidatedRemoteMove(piece, movePayload) {
+    if (this.config.mode === 'online' && !this.isHost) {
+      return {
+        type: movePayload.moveType,
+        cellId: movePayload.toCellId,
+        via: movePayload.via,
+        path: [movePayload.fromCellId, movePayload.toCellId]
+      };
+    }
+
+    if (this.config.mode !== 'online' || !this.isHost || this.gameOver) return null;
+    const peerIds = Array.isArray(this.config.peerIds) ? this.config.peerIds : [];
+    const expectedPeerId = peerIds[this.currentPlayer.id];
+    if (expectedPeerId && movePayload.fromPeerId !== expectedPeerId) return null;
+    if (!this.currentPlayer || !this.currentPlayer.ownsPiece(piece)) return null;
+    if (piece.cellId !== movePayload.fromCellId) return null;
+    if (movePayload.moveType !== 'move' && movePayload.moveType !== 'jump') return null;
+    if (this.jumpChain.length > 0 && piece !== this.selectedPiece) return null;
+    if (this.jumpChain.length > 0 && movePayload.moveType !== 'jump') return null;
+
+    const legalMoves = this.board.getLegalMoves(piece.cellId, this.jumpChain.length > 0);
+    const move = legalMoves.find((item) =>
+      item.cellId === movePayload.toCellId &&
+      item.type === movePayload.moveType &&
+      (item.type !== 'jump' || item.via === movePayload.via)
+    );
+    if (!move) return null;
+    if (movePayload.moveType === 'jump' && !Array.isArray(movePayload.jumpChain)) return null;
+    return move;
   }
 
   applyRemoteState(state) {
@@ -485,7 +598,7 @@ class Game {
     }
 
     if (this.currentPlayer.isAI) {
-      window.setTimeout(() => this.doAITurn(), CONFIG.AI_THINK_DELAY);
+      this.setGameTimeout(() => this.doAITurn(), CONFIG.AI_THINK_DELAY);
     }
   }
 
@@ -510,7 +623,7 @@ class Game {
     this.validMoves = [result.move];
     this.render();
 
-    window.setTimeout(() => {
+    this.setGameTimeout(() => {
       this.applyMove(result.piece, result.move);
     }, 250);
   }
@@ -600,8 +713,12 @@ class Game {
     playerInfo.innerHTML = this.players.map((player) => {
       const active = player.id === this.currentPlayer.id && !this.gameOver;
       const isSelf = player.id === this.myPlayerId;
+      const canRename = this.canRenamePlayer(player);
+      const seatColors = player.seats.map((seat) => BOARD_DATA.corners[seat].color);
+      const badgeColor = seatColors[0] || player.color;
+      const dotFill = seatColors.length > 1 ? `conic-gradient(${seatColors.join(', ')})` : badgeColor;
       const seatText = player.seats.map((seat) => {
-        const color = player.seats.length > 1 ? BOARD_DATA.corners[seat].color : player.color;
+        const color = BOARD_DATA.corners[seat].color;
         if (this.debugMode) {
           const corner = BOARD_DATA.corners[seat];
           const target = getTargetCorner(seat);
@@ -611,35 +728,68 @@ class Game {
       }).join('/');
       const finished = player.isFinished || this.rankings.includes(player.id);
       const selfMark = isSelf ? '（我）' : '';
-      const clickHandler = isSelf ? ` onclick="game.renamePlayer()" style="cursor:pointer"` : '';
-      return `<div class="player-badge ${active ? 'active' : ''} ${finished ? 'finished' : ''} ${isSelf ? 'self' : ''}" style="--player-color:${player.color}"${clickHandler}>
-        <span class="dot"></span>${player.name}${selfMark}<small>${seatText} ${player.finishedCount}/${player.pieces.length}</small>
+      const clickHandler = canRename ? ` onclick="game.renamePlayer(${player.id})" title="点击修改名称"` : '';
+      const editMark = canRename ? '<span class="edit-mark" aria-hidden="true">编辑</span>' : '';
+      return `<div class="player-badge ${active ? 'active' : ''} ${finished ? 'finished' : ''} ${isSelf ? 'self' : ''} ${canRename ? 'editable' : ''}" style="--player-color:${badgeColor};--player-dot:${dotFill}"${clickHandler}>
+        <span class="dot"></span><span class="player-copy"><span class="player-name">${this.escapeHtml(player.name)}${selfMark}</span><small>${seatText} ${player.finishedCount}/${player.pieces.length}</small></span>${editMark}
       </div>`;
     }).join('');
 
+    btnEndJump.hidden = true;
     if (this.gameOver) {
       const winner = this.players[this.rankings[0]];
       turnMessage.textContent = winner ? `冠军: ${winner.name}` : '游戏结束';
-      btnEndJump.hidden = true;
       return;
     }
 
     const networkStatus = this.network ? `<span style="color:${this.network.isConnected ? '#4ecdc4' : '#e94560'}">●</span> ` : '';
-    const prompt = message || (this.currentPlayer.isAI ? 'AI 思考中...' : '选择棋子');
-    turnMessage.innerHTML = `${networkStatus}${this.currentPlayer.name}: ${prompt}`;
-    btnEndJump.hidden = this.currentPlayer.isAI || this.jumpChain.length === 0;
+    const prompt = this.getTurnPrompt(message);
+    const plainMessage = `${this.currentPlayer.name}: ${prompt}`;
+    turnMessage.title = plainMessage;
+    turnMessage.innerHTML = `${networkStatus}${this.escapeHtml(this.currentPlayer.name)}: ${this.escapeHtml(prompt)}`;
   }
 
-  renamePlayer() {
-    const me = this.players[this.myPlayerId];
-    if (!me || me.isAI) return;
-    const newName = prompt('输入新名称：', me.name);
+  getTurnPrompt(message = '') {
+    const isOnline = this.config.mode === 'online';
+    const canAct = !isOnline || this.currentPlayer.id === this.myPlayerId;
+
+    if (this.currentPlayer.isAI) return 'AI 思考中...';
+    if (this.jumpChain.length > 0) {
+      return canAct ? '可继续跳跃；点击当前棋子结束回合' : '等待继续跳跃';
+    }
+    if (!canAct) return '等待行动';
+    return message || '选择棋子';
+  }
+
+  canRenamePlayer(player) {
+    if (!player || player.isAI) return false;
+    if (this.config.mode === 'online') return player.id === this.myPlayerId;
+    return true;
+  }
+
+  renamePlayer(playerId = this.myPlayerId) {
+    const player = this.players[playerId];
+    if (!this.canRenamePlayer(player)) return;
+    const newName = prompt('输入新名称：', player.name);
     if (!newName || newName.trim() === '') return;
-    me.setName(newName.trim());
+    const trimmed = newName.trim();
+    player.name = trimmed;
+    if (this.config.mode === 'online' && player.id === this.myPlayerId) {
+      Player.setName(trimmed);
+    }
     this.updateStatusBar();
     if (this.network) {
-      this.network.broadcastPlayerName({ name: newName.trim(), playerId: me.id });
+      this.network.broadcastPlayerName({ name: trimmed, playerId: player.id });
     }
+  }
+
+  escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   handleMouseMove(event) {

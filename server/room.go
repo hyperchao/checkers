@@ -138,6 +138,7 @@ func (r *Room) ToJSON() map[string]interface{} {
 		"status":      r.Status,
 		"hostId":      r.HostID,
 		"clientIds":   r.ClientIDs,
+		"peerIds":     append([]string{r.HostID}, r.ClientIDs...),
 		"playerCount": r.playerCountLocked(),
 		"maxPlayers":  r.Config.MaxPlayers,
 	}

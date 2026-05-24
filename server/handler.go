@@ -139,6 +139,8 @@ func (h *Hub) handleMessage(client *Client, msg Message) {
 		h.handleSDPAnswer(client, msg.Payload)
 	case MsgICECandidate:
 		h.handleICECandidate(client, msg.Payload)
+	case MsgRoomStart:
+		h.handleRoomStart(client)
 	case MsgLeaveRoom:
 		h.handleLeaveRoom(client)
 	default:
@@ -152,12 +154,27 @@ func (h *Hub) handleCreateRoom(client *Client, payload json.RawMessage) {
 	if err := json.Unmarshal(payload, &req); err != nil {
 		log.Printf("handleCreateRoom: invalid payload: %v", err)
 		client.SendMessage(Message{
-			Type: MsgError,
+			Type:    MsgError,
 			Payload: json.RawMessage(`{"message":"invalid payload"}`),
 		})
 		return
 	}
 	log.Printf("handleCreateRoom: parsed request, playerCount=%d", req.PlayerCount)
+
+	if req.MaxPlayers <= 0 {
+		req.MaxPlayers = req.PlayerCount
+	}
+	if req.PlayerCount < 2 ||
+		req.PlayerCount > 6 ||
+		req.SeatsPerPlayer < 1 ||
+		req.PlayerCount*req.SeatsPerPlayer > 6 ||
+		req.MaxPlayers != req.PlayerCount {
+		client.SendMessage(Message{
+			Type:    MsgError,
+			Payload: json.RawMessage(`{"message":"invalid room config"}`),
+		})
+		return
+	}
 
 	// Ensure client is registered in Hub (may not be if h.Register is blocked)
 	h.mu.Lock()
@@ -190,7 +207,7 @@ func (h *Hub) handleJoinRoom(client *Client, payload json.RawMessage) {
 	var req JoinRoomPayload
 	if err := json.Unmarshal(payload, &req); err != nil {
 		client.SendMessage(Message{
-			Type: MsgError,
+			Type:    MsgError,
 			Payload: json.RawMessage(`{"message":"invalid payload"}`),
 		})
 		return
@@ -199,7 +216,7 @@ func (h *Hub) handleJoinRoom(client *Client, payload json.RawMessage) {
 	room, exists := h.Rooms.GetRoom(req.RoomCode)
 	if !exists {
 		client.SendMessage(Message{
-			Type: MsgError,
+			Type:    MsgError,
 			Payload: json.RawMessage(`{"message":"room not found"}`),
 		})
 		return
@@ -207,7 +224,7 @@ func (h *Hub) handleJoinRoom(client *Client, payload json.RawMessage) {
 
 	if room.Status == RoomPlaying {
 		client.SendMessage(Message{
-			Type: MsgError,
+			Type:    MsgError,
 			Payload: json.RawMessage(`{"message":"room already playing"}`),
 		})
 		return
@@ -296,6 +313,57 @@ func (h *Hub) handleICECandidate(client *Client, payload json.RawMessage) {
 			"candidate": req.Candidate,
 		}),
 	})
+}
+
+func (h *Hub) handleRoomStart(client *Client) {
+	roomCode := client.GetRoom()
+	if roomCode == "" {
+		client.SendMessage(Message{
+			Type:    MsgError,
+			Payload: json.RawMessage(`{"message":"not in a room"}`),
+		})
+		return
+	}
+
+	room, exists := h.Rooms.GetRoom(roomCode)
+	if !exists {
+		client.SendMessage(Message{
+			Type:    MsgError,
+			Payload: json.RawMessage(`{"message":"room not found"}`),
+		})
+		return
+	}
+
+	if !room.IsHost(client.ID) {
+		client.SendMessage(Message{
+			Type:    MsgError,
+			Payload: json.RawMessage(`{"message":"only host can start the room"}`),
+		})
+		return
+	}
+
+	if !room.IsFull() {
+		client.SendMessage(Message{
+			Type:    MsgError,
+			Payload: json.RawMessage(`{"message":"room is not full"}`),
+		})
+		return
+	}
+
+	if err := room.Start(); err != nil {
+		client.SendMessage(Message{
+			Type:    MsgError,
+			Payload: mustMarshal(map[string]string{"message": err.Error()}),
+		})
+		return
+	}
+
+	msg := Message{
+		Type:    MsgRoomStart,
+		Payload: mustMarshal(room.ToJSON()),
+	}
+	client.SendMessage(msg)
+	h.broadcastToRoom(room.Code, msg, client.ID)
 }
 
 func (h *Hub) handleLeaveRoom(client *Client) {

@@ -8,6 +8,7 @@ class NetworkManager {
     this.roomInfo = null;
 
     this.peerConnection = null;
+    this.peerConnections = new Map();
     this.dataChannels = new Map();
     this.pendingCandidates = new Map();
 
@@ -66,13 +67,15 @@ class NetworkManager {
       this.sendSignaling(NETWORK_MESSAGES.LEAVE_ROOM, {});
     }
     this.closeDataChannels();
+    this.closePeerConnections();
     this.pendingCandidates.clear();
-    if (this.peerConnection) {
-      this.peerConnection.close();
-      this.peerConnection = null;
-    }
+    this.messageQueue = [];
     if (this.ws) {
       const ws = this.ws;
+      ws.onopen = null;
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.onmessage = null;
       this.ws = null;
       setTimeout(() => ws.close(), 50);
     }
@@ -112,7 +115,12 @@ class NetworkManager {
           break;
 
         case NETWORK_MESSAGES.ROOM_START:
-          this.onRoomStart();
+          if (msg.payload && msg.payload.code) {
+            this.roomInfo = msg.payload;
+            this.roomCode = msg.payload.code;
+            this.onRoomInfo(msg.payload);
+          }
+          this.onRoomStart(msg.payload);
           break;
 
         case NETWORK_MESSAGES.GAME_MOVE:
@@ -159,13 +167,17 @@ class NetworkManager {
     });
   }
 
-  async createPeerConnection() {
-    // Close existing peer connection if any
-    if (this.peerConnection) {
-      this.peerConnection.close();
-      this.peerConnection = null;
+  getHostPeerId() {
+    return this.roomInfo ? this.roomInfo.hostId : null;
+  }
+
+  async createPeerConnection(peerId = this.getTargetPeerId()) {
+    if (!peerId) return null;
+
+    const existing = this.peerConnections.get(peerId);
+    if (existing) {
+      return existing;
     }
-    this.pendingCandidates.clear();
 
     const config = {
       iceServers: [
@@ -174,66 +186,65 @@ class NetworkManager {
       ]
     };
 
-    this.peerConnection = new RTCPeerConnection(config);
+    const peerConnection = new RTCPeerConnection(config);
+    this.peerConnections.set(peerId, peerConnection);
+    if (!this.peerConnection) this.peerConnection = peerConnection;
 
-    this.peerConnection.onicecandidate = (event) => {
+    peerConnection.onicecandidate = (event) => {
       if (event.candidate && this.roomCode) {
-        const targetId = this.getTargetPeerId();
-        if (!targetId) return;
         this.sendSignaling(NETWORK_MESSAGES.ICE_CANDIDATE, {
           roomCode: this.roomCode,
-          targetId: targetId,
+          targetId: peerId,
           candidate: JSON.stringify(event.candidate)
         });
       }
     };
 
-    this.peerConnection.onconnectionstatechange = () => {
-      console.log('PeerConnection state:', this.peerConnection.connectionState);
-      if (this.peerConnection.connectionState === 'disconnected' ||
-          this.peerConnection.connectionState === 'failed') {
+    peerConnection.onconnectionstatechange = () => {
+      console.log('PeerConnection state:', peerId, peerConnection.connectionState);
+      if (peerConnection.connectionState === 'disconnected' ||
+          peerConnection.connectionState === 'failed') {
         this.onDisconnected();
       }
     };
 
-    this.peerConnection.ondatachannel = (event) => {
+    peerConnection.ondatachannel = (event) => {
       const channel = event.channel;
-      this.setupDataChannel(channel);
+      this.setupDataChannel(channel, peerId);
     };
+
+    return peerConnection;
   }
 
-  async createDataChannel(label) {
-    if (!this.peerConnection) {
-      await this.createPeerConnection();
-    }
+  async createDataChannel(label, peerId = this.getTargetPeerId()) {
+    const peerConnection = await this.createPeerConnection(peerId);
+    if (!peerConnection) return null;
 
-    const channel = this.peerConnection.createDataChannel(label, {
+    const channel = peerConnection.createDataChannel(label, {
       ordered: true
     });
 
-    this.setupDataChannel(channel);
+    this.setupDataChannel(channel, peerId);
     return channel;
   }
 
   async setupWebRTC() {
-    await this.createPeerConnection();
-
-    if (this.mode === 'host') {
-      const channel = this.peerConnection.createDataChannel('game', {
-        ordered: true
-      });
-      this.setupDataChannel(channel);
+    if (this.mode === 'client') {
+      await this.createPeerConnection(this.getHostPeerId());
     }
   }
 
   async sendSDPOffer(targetId) {
     console.log('sendSDPOffer to', targetId);
-    if (!this.peerConnection) {
-      await this.createPeerConnection();
+    const peerConnection = await this.createPeerConnection(targetId);
+    if (!peerConnection) return;
+
+    if (!this.dataChannels.has(targetId)) {
+      await this.createDataChannel('game', targetId);
     }
 
-    const offer = await this.peerConnection.createOffer();
-    await this.peerConnection.setLocalDescription(offer);
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
 
     this.sendSignaling(NETWORK_MESSAGES.SDP_OFFER, {
       roomCode: this.roomCode,
@@ -246,15 +257,14 @@ class NetworkManager {
 
   async handleSDPOffer(payload) {
     console.log('handleSDPOffer received from', payload.fromId);
-    if (!this.peerConnection) {
-      await this.createPeerConnection();
-    }
+    const peerConnection = await this.createPeerConnection(payload.fromId);
+    if (!peerConnection) return;
 
     const sdp = JSON.parse(payload.sdp);
-    await this.peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
 
-    const answer = await this.peerConnection.createAnswer();
-    await this.peerConnection.setLocalDescription(answer);
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
 
     console.log('handleSDPOffer: sending SDP answer to', payload.fromId);
     this.sendSignaling(NETWORK_MESSAGES.SDP_ANSWER, {
@@ -267,23 +277,23 @@ class NetworkManager {
     if (this.pendingCandidates.has(payload.fromId)) {
       const candidates = this.pendingCandidates.get(payload.fromId);
       for (const candidate of candidates) {
-        await this.peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(candidate)));
+        await peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(candidate)));
       }
       this.pendingCandidates.delete(payload.fromId);
     }
   }
 
-  setupDataChannel(channel) {
+  setupDataChannel(channel, peerId = this.getTargetPeerId()) {
     channel.onopen = () => {
-      console.log('DataChannel opened:', channel.label, 'mode=', this.mode);
-      this.dataChannels.set(channel.label, channel);
-      this.flushMessageQueue();
-      this.onDataChannelReady();
+      console.log('DataChannel opened:', channel.label, 'peer=', peerId, 'mode=', this.mode);
+      this.dataChannels.set(peerId || channel.label, channel);
+      this.flushMessageQueue(peerId);
+      this.onDataChannelReady(peerId);
     };
 
     channel.onclose = () => {
-      console.log('DataChannel closed:', channel.label);
-      this.dataChannels.delete(channel.label);
+      console.log('DataChannel closed:', channel.label, 'peer=', peerId);
+      this.dataChannels.delete(peerId || channel.label);
     };
 
     channel.onmessage = (event) => {
@@ -294,7 +304,7 @@ class NetworkManager {
 
       switch (msg.type) {
         case NETWORK_MESSAGES.GAME_MOVE:
-          this.onGameMove(msg.payload);
+          this.onGameMove({ ...msg.payload, fromPeerId: peerId });
           break;
         case NETWORK_MESSAGES.GAME_STATE:
           if (msg.payload && msg.payload.request) {
@@ -308,7 +318,7 @@ class NetworkManager {
           break;
         case NETWORK_MESSAGES.PLAYER_NAME:
           if (this.onPlayerNameUpdate) {
-            this.onPlayerNameUpdate(msg.payload);
+            this.onPlayerNameUpdate({ ...msg.payload, fromPeerId: peerId });
           }
           break;
       }
@@ -317,25 +327,27 @@ class NetworkManager {
 
   async handleSDPAnswer(payload) {
     console.log('handleSDPAnswer received from', payload.fromId);
-    if (!this.peerConnection) return;
+    const peerConnection = this.peerConnections.get(payload.fromId);
+    if (!peerConnection) return;
 
     const sdp = JSON.parse(payload.sdp);
-    await this.peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
     console.log('handleSDPAnswer: remote description set');
 
     if (this.pendingCandidates.has(payload.fromId)) {
       const candidates = this.pendingCandidates.get(payload.fromId);
       for (const candidate of candidates) {
-        await this.peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(candidate)));
+        await peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(candidate)));
       }
       this.pendingCandidates.delete(payload.fromId);
     }
   }
 
   async handleICECandidate(payload) {
-    if (this.peerConnection && this.peerConnection.remoteDescription) {
+    const peerConnection = this.peerConnections.get(payload.fromId);
+    if (peerConnection && peerConnection.remoteDescription) {
       try {
-        await this.peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(payload.candidate)));
+        await peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(payload.candidate)));
       } catch (e) {
         console.warn('Failed to add ICE candidate:', e);
       }
@@ -350,12 +362,12 @@ class NetworkManager {
   broadcastToRoom(message) {
     const data = serializeMessage(message);
     console.log('broadcastToRoom: sending message type=', message.type, 'channels=', this.dataChannels.size);
-    this.dataChannels.forEach((channel) => {
+    this.dataChannels.forEach((channel, peerId) => {
       if (channel.readyState === 'open') {
         channel.send(data);
       } else {
         console.log('broadcastToRoom: channel not open, state=', channel.readyState);
-        this.messageQueue.push(data);
+        this.messageQueue.push({ peerId, data });
       }
     });
   }
@@ -366,37 +378,63 @@ class NetworkManager {
 
   sendToHost(message) {
     console.log('sendToHost called, dataChannels size=', this.dataChannels.size);
-    if (this.dataChannels.size === 0) {
+    const hostId = this.getHostPeerId();
+    const channel = this.dataChannels.get(hostId) || this.dataChannels.values().next().value;
+    if (!channel) {
       console.log('sendToHost: no data channels, queuing message');
-      this.messageQueue.push(serializeMessage(message));
+      this.messageQueue.push({ peerId: hostId, data: serializeMessage(message) });
       return;
     }
-    const channel = this.dataChannels.values().next().value;
     if (channel.readyState === 'open') {
       console.log('sendToHost: sending via data channel');
       channel.send(serializeMessage(message));
     } else {
       console.log('sendToHost: channel not open, queuing message, state=', channel.readyState);
-      this.messageQueue.push(serializeMessage(message));
+      this.messageQueue.push({ peerId: hostId, data: serializeMessage(message) });
     }
   }
 
-  flushMessageQueue() {
-    while (this.messageQueue.length > 0) {
-      const data = this.messageQueue.shift();
-      this.dataChannels.forEach((channel) => {
-        if (channel.readyState === 'open') {
-          channel.send(data);
-        }
-      });
-    }
+  flushMessageQueue(openedPeerId = null) {
+    this.messageQueue = this.messageQueue.filter((item) => {
+      if (item.peerId && openedPeerId && item.peerId !== openedPeerId) return true;
+      const channel = item.peerId ? this.dataChannels.get(item.peerId) : null;
+      if (channel && channel.readyState === 'open') {
+        channel.send(item.data);
+        return false;
+      }
+      if (!item.peerId) {
+        let sent = false;
+        this.dataChannels.forEach((candidate) => {
+          if (candidate.readyState === 'open') {
+            candidate.send(item.data);
+            sent = true;
+          }
+        });
+        return !sent;
+      }
+      return true;
+    });
   }
 
   closeDataChannels() {
     this.dataChannels.forEach((channel) => {
+      channel.onopen = null;
+      channel.onclose = null;
+      channel.onmessage = null;
       channel.close();
     });
     this.dataChannels.clear();
+  }
+
+  closePeerConnections() {
+    this.peerConnections.forEach((peerConnection) => {
+      peerConnection.onicecandidate = null;
+      peerConnection.onconnectionstatechange = null;
+      peerConnection.ondatachannel = null;
+      peerConnection.close();
+    });
+    this.peerConnections.clear();
+    this.peerConnection = null;
   }
 
   getTargetPeerId() {
@@ -407,6 +445,11 @@ class NetworkManager {
       return this.roomInfo.hostId || null;
     }
     return null;
+  }
+
+  isPeerConnected(peerId) {
+    const channel = this.dataChannels.get(peerId);
+    return Boolean(channel && channel.readyState === 'open');
   }
 
   get isConnected() {

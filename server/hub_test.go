@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 func TestNewHub(t *testing.T) {
@@ -29,11 +30,7 @@ func TestHubRegisterClient(t *testing.T) {
 
 	hub.Register <- client
 
-	hub.mu.RLock()
-	_, exists := hub.Clients["test1"]
-	hub.mu.RUnlock()
-
-	if !exists {
+	if !waitForClientState(hub, "test1", true) {
 		t.Fatal("expected client to be registered")
 	}
 }
@@ -51,13 +48,23 @@ func TestHubUnregisterClient(t *testing.T) {
 	hub.Register <- client
 	hub.Unregister <- client
 
-	hub.mu.RLock()
-	_, exists := hub.Clients["test1"]
-	hub.mu.RUnlock()
-
-	if exists {
+	if !waitForClientState(hub, "test1", false) {
 		t.Fatal("expected client to be unregistered")
 	}
+}
+
+func waitForClientState(hub *Hub, clientID string, expectedExists bool) bool {
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		hub.mu.RLock()
+		_, exists := hub.Clients[clientID]
+		hub.mu.RUnlock()
+		if exists == expectedExists {
+			return true
+		}
+		time.Sleep(time.Millisecond)
+	}
+	return false
 }
 
 func TestHubGetClient(t *testing.T) {

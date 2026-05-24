@@ -642,10 +642,7 @@
       const startBtn = document.getElementById('startOnlineBtn');
 
       if (isHost) {
-        if (info.status === 'full') {
-          startBtn.disabled = false;
-          document.getElementById('waitingText').textContent = '连接已建立，可以开始游戏';
-        } else if (info.clientIds && info.clientIds.length === info.maxPlayers - 1) {
+        if (isRoomReadyToStart(info)) {
           startBtn.disabled = false;
           document.getElementById('waitingText').textContent = '连接已建立，可以开始游戏';
         } else {
@@ -675,7 +672,7 @@
       const currentClients = roomInfo.clientIds ? roomInfo.clientIds.length : 0;
       console.log('handleDataChannelReady: current clients:', currentClients, 'maxPlayers:', roomInfo.maxPlayers);
       
-      if (currentClients >= roomInfo.maxPlayers - 1) {
+      if (isRoomReadyToStart(roomInfo)) {
         const startBtn = document.getElementById('startOnlineBtn');
         startBtn.disabled = false;
         document.getElementById('waitingText').textContent = '连接已建立，可以开始游戏';
@@ -698,7 +695,9 @@
         console.log('Before: startScreen.style.display:', startScreen.style.display, 'gameArea.style.display:', gameArea.style.display);
         
         startScreen.style.display = 'none';
+        startScreen.classList.add('hidden');
         gameArea.style.display = '';
+        gameArea.classList.remove('hidden');
         
         console.log('After: startScreen.style.display:', startScreen.style.display, 'gameArea.style.display:', gameArea.style.display);
         
@@ -712,15 +711,23 @@
 
         console.log('Creating Game with config:', { mode: 'online', network: true, playerCount: cfg.playerCount, seatsPerPlayer: cfg.seatsPerPlayer, isHost });
 
+        if (window.game && typeof window.game.dispose === 'function') {
+          window.game.dispose({ disconnectNetwork: false });
+        }
+
         window.game = new Game({
           mode: 'online',
           network: true,
+          embedded: true,
           playerCount: cfg.playerCount || 2,
           seatsPerPlayer: cfg.seatsPerPlayer || 1,
           isHost: isHost,
           roomCode: roomInfo.code,
+          peerIds: roomInfo.peerIds || [roomInfo.hostId].concat(roomInfo.clientIds || []),
           networkManager: networkManager
         });
+        const restartBtn = document.getElementById('btnRestart');
+        if (restartBtn) restartBtn.hidden = true;
       } catch (e) {
         console.error('handleRoomStart error:', e);
       }
@@ -748,14 +755,26 @@
         return;
       }
       
-      console.log('All checks passed, broadcasting ROOM_START');
+      if (!isRoomReadyToStart(roomInfo)) {
+        alert('等待所有玩家连接建立');
+        return;
+      }
+
+      console.log('All checks passed, signaling ROOM_START');
       console.log('dataChannels.size:', networkManager.dataChannels.size);
       console.log('dataChannels:', Array.from(networkManager.dataChannels.keys()));
       
-      networkManager.broadcastToRoom(createMessage(NETWORK_MESSAGES.ROOM_START, {}));
-      console.log('Broadcast sent, calling handleRoomStart');
-      handleRoomStart();
+      networkManager.sendSignaling(NETWORK_MESSAGES.ROOM_START, {
+        roomCode: roomInfo.code
+      });
     });
+
+    function isRoomReadyToStart(info) {
+      if (!info || !networkManager || networkManager.peerId !== info.hostId) return false;
+      const clientIds = info.clientIds || [];
+      if (clientIds.length !== info.maxPlayers - 1) return false;
+      return clientIds.every((clientId) => networkManager.isPeerConnected(clientId));
+    }
 
     function showOnlineError(msg) {
       const errorEl = document.getElementById('onlineError');
@@ -780,15 +799,22 @@
         networkManager = null;
       }
       if (window.game) {
+        if (typeof window.game.dispose === 'function') {
+          window.game.dispose({ disconnectNetwork: false });
+        }
         window.game = null;
       }
       document.getElementById('gameArea').classList.add('hidden');
-      document.querySelector('.start-screen').classList.remove('hidden');
+      document.getElementById('gameArea').style.display = 'none';
+      const startScreen = document.querySelector('.start-screen');
+      startScreen.style.display = '';
+      startScreen.classList.remove('hidden');
       resetOnlineUI();
     });
 
     document.getElementById('btnRestart').addEventListener('click', () => {
       if (window.game) {
+        if (window.game.config && window.game.config.mode === 'online') return;
         window.game.startGame();
       }
     });
@@ -802,6 +828,7 @@
 
     document.getElementById('btnEndJump').addEventListener('click', () => {
       if (window.game) {
+        if (window.game.config && window.game.config.mode === 'online') return;
         window.game.endJumpTurn();
       }
     });

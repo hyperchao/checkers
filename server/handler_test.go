@@ -308,6 +308,85 @@ func TestHandleICECandidate(t *testing.T) {
 	}
 }
 
+func TestHandleRoomStart(t *testing.T) {
+	hub := NewHub(NewRoomManager())
+
+	room := hub.Rooms.CreateRoom("host1", RoomConfig{MaxPlayers: 2})
+	_ = room.AddClient("client1")
+
+	hostClient := &Client{
+		ID:       "host1",
+		Send:     make(chan []byte, 256),
+		RoomCode: room.Code,
+	}
+	clientClient := &Client{
+		ID:       "client1",
+		Send:     make(chan []byte, 256),
+		RoomCode: room.Code,
+	}
+	hub.mu.Lock()
+	hub.Clients["host1"] = hostClient
+	hub.Clients["client1"] = clientClient
+	hub.mu.Unlock()
+
+	hub.handleRoomStart(hostClient)
+
+	if room.Status != RoomPlaying {
+		t.Errorf("expected room status playing, got %s", room.Status)
+	}
+
+	var hostMsg Message
+	select {
+	case data := <-hostClient.Send:
+		json.Unmarshal(data, &hostMsg)
+	default:
+		t.Fatal("expected host to receive room start")
+	}
+	if hostMsg.Type != MsgRoomStart {
+		t.Errorf("expected host message %s, got %s", MsgRoomStart, hostMsg.Type)
+	}
+
+	var clientMsg Message
+	select {
+	case data := <-clientClient.Send:
+		json.Unmarshal(data, &clientMsg)
+	default:
+		t.Fatal("expected client to receive room start")
+	}
+	if clientMsg.Type != MsgRoomStart {
+		t.Errorf("expected client message %s, got %s", MsgRoomStart, clientMsg.Type)
+	}
+}
+
+func TestHandleRoomStartRejectsNonHost(t *testing.T) {
+	hub := NewHub(NewRoomManager())
+
+	room := hub.Rooms.CreateRoom("host1", RoomConfig{MaxPlayers: 2})
+	_ = room.AddClient("client1")
+
+	clientClient := &Client{
+		ID:       "client1",
+		Send:     make(chan []byte, 256),
+		RoomCode: room.Code,
+	}
+
+	hub.handleRoomStart(clientClient)
+
+	var msg Message
+	select {
+	case data := <-clientClient.Send:
+		json.Unmarshal(data, &msg)
+	default:
+		t.Fatal("expected error message")
+	}
+	if msg.Type != MsgError {
+		t.Errorf("expected error message, got %s", msg.Type)
+	}
+	if room.Status == RoomPlaying {
+		t.Fatal("expected non-host start to be rejected")
+	}
+}
+
 func TestHandleLeaveRoom(t *testing.T) {
 	hub := NewHub(NewRoomManager())
 
