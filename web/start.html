@@ -412,6 +412,9 @@
         if (input) {
           input.value = roomCode.toUpperCase();
           document.querySelector('[data-mode="online"]').click();
+          setTimeout(() => {
+            document.getElementById('joinRoomBtn').click();
+          }, 100);
         }
       }
     })();
