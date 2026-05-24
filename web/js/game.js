@@ -174,7 +174,11 @@ class Game {
 
     if (this.config.mode === 'online') {
       this.myPlayerId = this.isHost ? 0 : 1;
-      this.players[this.myPlayerId].applySavedName();
+      this.players[this.myPlayerId].applySavedName((name) => {
+        if (this.network) {
+          this.network.broadcastPlayerName({ name, playerId: this.myPlayerId });
+        }
+      });
     } else {
       this.myPlayerId = null;
     }

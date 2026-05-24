@@ -23,9 +23,12 @@ class Player {
     Player.setName(name);
   }
 
-  applySavedName() {
+  applySavedName(broadcastFn) {
     const saved = Player.getSavedName();
-    if (saved) this.name = saved;
+    if (saved) {
+      this.name = saved;
+      if (broadcastFn) broadcastFn(saved);
+    }
   }
 
   addPiece(piece) {
