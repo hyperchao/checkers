@@ -172,12 +172,9 @@ class Game {
       return new Player(index, seats, isAI, this.config.aiDifficulty, isRemote);
     });
 
-    if (this.config.mode === 'online' && this.myPlayerId !== null) {
-      this.players[this.myPlayerId].applySavedName();
-    }
-
     if (this.config.mode === 'online') {
       this.myPlayerId = this.isHost ? 0 : 1;
+      this.players[this.myPlayerId].applySavedName();
     } else {
       this.myPlayerId = null;
     }
@@ -630,15 +627,14 @@ class Game {
   }
 
   renamePlayer() {
-    if (this.myPlayerId === null) return;
     const me = this.players[this.myPlayerId];
-    if (!me) return;
+    if (!me || me.isAI) return;
     const newName = prompt('输入新名称：', me.name);
     if (!newName || newName.trim() === '') return;
     me.setName(newName.trim());
     this.updateStatusBar();
     if (this.network) {
-      this.network.broadcastPlayerName({ name: newName.trim(), playerId: this.myPlayerId });
+      this.network.broadcastPlayerName({ name: newName.trim(), playerId: me.id });
     }
   }
 
