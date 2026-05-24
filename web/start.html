@@ -675,11 +675,21 @@
     function handleRoomStart() {
       try {
         console.log('handleRoomStart called, roomInfo=', roomInfo);
+        
         const startScreen = document.querySelector('.start-screen');
         const gameArea = document.getElementById('gameArea');
         
-        if (startScreen) startScreen.classList.add('hidden');
-        if (gameArea) gameArea.classList.remove('hidden');
+        if (!startScreen || !gameArea) {
+          console.error('DOM elements not found! startScreen:', !!startScreen, 'gameArea:', !!gameArea);
+          return;
+        }
+        
+        console.log('Before: startScreen.style.display:', startScreen.style.display, 'gameArea.style.display:', gameArea.style.display);
+        
+        startScreen.style.display = 'none';
+        gameArea.style.display = '';
+        
+        console.log('After: startScreen.style.display:', startScreen.style.display, 'gameArea.style.display:', gameArea.style.display);
         
         if (!roomInfo) {
           console.error('handleRoomStart: roomInfo is null');
@@ -706,13 +716,33 @@
     }
 
     document.getElementById('startOnlineBtn').addEventListener('click', () => {
-      if (!networkManager || networkManager.mode !== 'host') return;
-      if (!roomInfo) {
-        console.error('startOnlineBtn clicked but roomInfo is null');
+      console.log('=== startOnlineBtn clicked ===');
+      console.log('networkManager:', networkManager ? 'exists' : 'null');
+      console.log('networkManager.mode:', networkManager ? networkManager.mode : 'N/A');
+      console.log('roomInfo:', roomInfo ? 'exists' : 'null');
+      
+      if (!networkManager) {
+        console.error('networkManager is null!');
+        alert('networkManager 未初始化');
         return;
       }
-      console.log('startOnlineBtn clicked, broadcasting ROOM_START');
+      if (networkManager.mode !== 'host') {
+        console.error('networkManager.mode is not host:', networkManager.mode);
+        alert('非房主无法开始游戏');
+        return;
+      }
+      if (!roomInfo) {
+        console.error('roomInfo is null!');
+        alert('房间信息不存在');
+        return;
+      }
+      
+      console.log('All checks passed, broadcasting ROOM_START');
+      console.log('dataChannels.size:', networkManager.dataChannels.size);
+      console.log('dataChannels:', Array.from(networkManager.dataChannels.keys()));
+      
       networkManager.broadcastToRoom(createMessage(NETWORK_MESSAGES.ROOM_START, {}));
+      console.log('Broadcast sent, calling handleRoomStart');
       handleRoomStart();
     });
 
